@@ -32,18 +32,21 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$PROFILE"
 
 env_set RESOURCE_PROFILE "$NAME" "$ENV_FILE"
+env_set RESOURCE_MODE auto "$ENV_FILE"
 sync_profile_env "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 echo "Applied resource profile: $NAME → $ENV_FILE"
+echo "RESOURCE_MODE reset to auto (fixed caps from profile)."
 echo "Scout/Mail synced from COMPOSE_PROFILES=$(profiles_csv || true)"
 echo "Recreate containers to apply limits:"
 echo "  ./dock up --force-recreate"
 echo
 if [[ "$NAME" == "small" ]]; then
   echo "Small-host tips:"
-  echo "  - Run ONE app only (not hris+crms+api)."
+  echo "  - Run ONE app only."
   echo "  - Prefer PHP-FPM over Octane."
   echo "  - Set COMPOSE_PROFILES= (empty) to skip workspace/mailpit/meilisearch."
+  echo "  - Or RESOURCE_MODE=unlimited (no cgroup caps — OOM risk on tiny hosts)."
   echo "  - Enable search only when needed: COMPOSE_PROFILES=search then ./dock setup."
 fi

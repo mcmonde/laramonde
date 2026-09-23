@@ -190,7 +190,26 @@ Always starts from **this server's real CPU/RAM**.
 | OK | &lt; 75% budget | continue |
 | WARNING | ≥ 75% | prompt `[y/N]` |
 | CRITICAL | ≥ 95% | prompt |
-| BLOCKED | over hard mins | abort (unless `--force`) |
+| BLOCKED | over hard mins | abort (unless `--force` or `RESOURCE_MODE=unlimited`) |
+
+### No Docker limits (`RESOURCE_MODE=unlimited`)
+
+Use when you want containers to share the host freely (e.g. tiny 2GB droplet). Compose treats `cpus`/`memory` `0` as **no cgroup caps**. Capacity hard-blocks become warnings only.
+
+```env
+# .env
+RESOURCE_MODE=unlimited
+```
+
+```bash
+./dock resources apply
+./dock up --force-recreate
+```
+
+Switch back with `RESOURCE_MODE=auto` then `./dock resources apply`.  
+`./dock profile small|medium|large` resets to `auto`.
+
+Warning: under memory pressure the **kernel OOM killer** may stop Postgres/Redis/nginx unpredictably — prefer more RAM when you can.
 
 ## Adding / removing apps
 

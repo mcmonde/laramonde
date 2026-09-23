@@ -10,6 +10,23 @@ source "$ROOT/scripts/_lib.sh"
 ENV_FILE="$ROOT/.env"
 PLAN_FILE="$ROOT/.resources.plan"
 
+# auto (default) = cgroup CPU/RAM limits from host plan
+# unlimited     = no Docker limits (cpus/memory 0 → compose clears limits);
+#                 capacity hard-blocks become warnings only
+resource_mode() {
+  local m
+  m="$(env_get RESOURCE_MODE "$ENV_FILE")"
+  m="$(echo "${m:-auto}" | tr '[:upper:]' '[:lower:]')"
+  case "$m" in
+    unlimited|none|off|0) echo "unlimited" ;;
+    *) echo "auto" ;;
+  esac
+}
+
+resource_mode_unlimited() {
+  [[ "$(resource_mode)" == "unlimited" ]]
+}
+
 # ---- host detection --------------------------------------------------------
 
 host_cpus() {
@@ -225,6 +242,21 @@ build_plan() {
     fi
   fi
 
+  # Unlimited mode: never hard-block; keep advisory warnings
+  if resource_mode_unlimited; then
+    if [[ "$PLAN_OK" -eq 0 ]]; then
+      local blocked_reason="$PLAN_REASON"
+      PLAN_OK=1
+      PLAN_LEVEL="warn"
+      PLAN_WARN="RESOURCE_MODE=unlimited — hard capacity block bypassed (${blocked_reason}). Kernel OOM may kill processes under pressure."
+      PLAN_REASON="Unlimited mode: Docker CPU/RAM limits will not be applied."
+    elif [[ -z "${PLAN_WARN:-}" ]]; then
+      PLAN_WARN="RESOURCE_MODE=unlimited — Docker CPU/RAM cgroup limits disabled; host OOM killer is the safety net."
+    else
+      PLAN_WARN="${PLAN_WARN} (RESOURCE_MODE=unlimited — no cgroup caps)"
+    fi
+  fi
+
   # Distribute surplus by per-app RESOURCE_WEIGHT (default 1).
   # Octane gets an automatic 1.25× multiplier on top of that weight.
   local weight_total="0"
@@ -322,21 +354,27 @@ split_app_budget() {
 }
 
 print_plan() {
-  local profiles
+  local profiles mode
   profiles="$(profiles_csv)"
+  mode="$(resource_mode)"
   echo "════════════════════════════════════════════════════════"
   echo " Host detection"
   echo "════════════════════════════════════════════════════════"
   echo "  CPU : ${HOST_CPUS} core(s)"
   echo "  RAM : ${HOST_MEM_MB} MB ($(mb_to_compose "$HOST_MEM_MB"))"
   echo "  Profiles: ${profiles:-none}"
+  echo "  RESOURCE_MODE: ${mode}"
   echo
   compute_capacity
   echo "════════════════════════════════════════════════════════"
   echo " Capacity (minimums: FPM ${FPM_MIN_MB}MB/${FPM_MIN_CPU}cpu, Octane ${OCT_MIN_MB}MB/${OCT_MIN_CPU}cpu)"
   echo "════════════════════════════════════════════════════════"
-  echo "  Max PHP-FPM apps on this host : ${CAP_MAX_FPM}"
-  echo "  Max Octane apps on this host  : ${CAP_MAX_OCTANE}"
+  if [[ "$mode" == "unlimited" ]]; then
+    echo "  Max PHP-FPM / Octane apps    : (unlimited — no cgroup caps; advisory only)"
+  else
+    echo "  Max PHP-FPM apps on this host : ${CAP_MAX_FPM}"
+    echo "  Max Octane apps on this host  : ${CAP_MAX_OCTANE}"
+  fi
   echo "  Apps deployed now             : ${PLAN_EXISTING} (rooms left ≈ FPM:${CAP_LEFT_FPM} / Octane:${CAP_LEFT_OCTANE} weight-units)"
   echo
   echo "════════════════════════════════════════════════════════"
@@ -353,9 +391,16 @@ print_plan() {
     critical) echo "  Status         : CRITICAL — at practical limit" ;;
     blocked)  echo "  Status         : BLOCKED — over hard limits" ;;
   esac
+  if [[ "$mode" == "unlimited" ]]; then
+    echo "  Docker limits  : OFF (cpus/memory 0 → no cgroup caps)"
+  fi
   if [[ "$PLAN_OK" -eq 1 ]]; then
-    echo "  Per-app share  : ~$(mb_to_compose "$FPM_TOTAL_MB") FPM (weight=1) | ~$(mb_to_compose "$OCT_TOTAL_MB") Octane (weight=1)"
-    echo "  Tip            : set RESOURCE_WEIGHT=2 in sites/<app>/defaults.env for a heavier app"
+    if [[ "$mode" != "unlimited" ]]; then
+      echo "  Per-app share  : ~$(mb_to_compose "$FPM_TOTAL_MB") FPM (weight=1) | ~$(mb_to_compose "$OCT_TOTAL_MB") Octane (weight=1)"
+      echo "  Tip            : set RESOURCE_WEIGHT=2 in sites/<app>/defaults.env for a heavier app"
+    else
+      echo "  Tip            : set RESOURCE_MODE=auto and ./dock resources apply to restore caps"
+    fi
   else
     echo "  Reason         : $PLAN_REASON"
   fi
@@ -416,11 +461,58 @@ compute_capacity() {
 apply_infra_to_env() {
   [[ -f "$ENV_FILE" ]] || { echo "Missing .env — run ./dock setup"; exit 1; }
 
-  env_set NGINX_CPUS "$INFRA_NGINX_CPU" "$ENV_FILE"
-  env_set NGINX_MEMORY "$(mb_to_compose "$INFRA_NGINX_MB")" "$ENV_FILE"
+  local unlimited=0
+  if resource_mode_unlimited; then unlimited=1; fi
 
-  env_set POSTGRES_CPUS "$INFRA_PG_CPU" "$ENV_FILE"
-  env_set POSTGRES_MEMORY "$(mb_to_compose "$INFRA_PG_MB")" "$ENV_FILE"
+  if [[ "$unlimited" -eq 1 ]]; then
+    # cpus/memory 0 → Compose clears deploy.resources.limits (no cgroup caps)
+    env_set NGINX_CPUS 0 "$ENV_FILE"
+    env_set NGINX_MEMORY 0 "$ENV_FILE"
+    env_set POSTGRES_CPUS 0 "$ENV_FILE"
+    env_set POSTGRES_MEMORY 0 "$ENV_FILE"
+    env_set REDIS_CPUS 0 "$ENV_FILE"
+    env_set REDIS_MEMORY 0 "$ENV_FILE"
+    env_set REDIS_MAXMEMORY 0 "$ENV_FILE"
+    env_set MEILI_CPUS 0 "$ENV_FILE"
+    env_set MEILI_MEMORY 0 "$ENV_FILE"
+    env_set WORKSPACE_CPUS 0 "$ENV_FILE"
+    env_set WORKSPACE_MEMORY 0 "$ENV_FILE"
+    env_set MAILPIT_CPUS 0 "$ENV_FILE"
+    env_set MAILPIT_MEMORY 0 "$ENV_FILE"
+    env_set CERTBOT_CPUS 0 "$ENV_FILE"
+    env_set CERTBOT_MEMORY 0 "$ENV_FILE"
+  else
+    env_set NGINX_CPUS "$INFRA_NGINX_CPU" "$ENV_FILE"
+    env_set NGINX_MEMORY "$(mb_to_compose "$INFRA_NGINX_MB")" "$ENV_FILE"
+
+    env_set POSTGRES_CPUS "$INFRA_PG_CPU" "$ENV_FILE"
+    env_set POSTGRES_MEMORY "$(mb_to_compose "$INFRA_PG_MB")" "$ENV_FILE"
+
+    env_set REDIS_CPUS "$INFRA_REDIS_CPU" "$ENV_FILE"
+    env_set REDIS_MEMORY "$(mb_to_compose "$INFRA_REDIS_MB")" "$ENV_FILE"
+    local redis_max
+    redis_max="$(imax 32 "$((INFRA_REDIS_MB * 2 / 3))")"
+    env_set REDIS_MAXMEMORY "${redis_max}mb" "$ENV_FILE"
+
+    if [[ "$INFRA_MEILI_MB" -gt 0 ]]; then
+      env_set MEILI_CPUS "$INFRA_MEILI_CPU" "$ENV_FILE"
+      env_set MEILI_MEMORY "$(mb_to_compose "$INFRA_MEILI_MB")" "$ENV_FILE"
+    fi
+    if [[ "$INFRA_WS_MB" -gt 0 ]]; then
+      env_set WORKSPACE_CPUS "$INFRA_WS_CPU" "$ENV_FILE"
+      env_set WORKSPACE_MEMORY "$(mb_to_compose "$INFRA_WS_MB")" "$ENV_FILE"
+    fi
+    if [[ "$INFRA_MAIL_MB" -gt 0 ]]; then
+      env_set MAILPIT_CPUS "$INFRA_MAIL_CPU" "$ENV_FILE"
+      env_set MAILPIT_MEMORY "$(mb_to_compose "$INFRA_MAIL_MB")" "$ENV_FILE"
+    fi
+    if [[ "$INFRA_CERT_MB" -gt 0 ]]; then
+      env_set CERTBOT_CPUS "$INFRA_CERT_CPU" "$ENV_FILE"
+      env_set CERTBOT_MEMORY "$(mb_to_compose "$INFRA_CERT_MB")" "$ENV_FILE"
+    fi
+  fi
+
+  # Postgres -c tuning still follows host size (even when cgroup limits are off)
   local pg_shared pg_cache pg_conn
   pg_shared="$(imax 64 "$((INFRA_PG_MB / 4))")"
   pg_cache="$(imax 128 "$((INFRA_PG_MB * 2 / 3))")"
@@ -429,30 +521,12 @@ apply_infra_to_env() {
   env_set POSTGRES_EFFECTIVE_CACHE "$(mb_to_postgres "$pg_cache")" "$ENV_FILE"
   env_set POSTGRES_MAX_CONNECTIONS "$pg_conn" "$ENV_FILE"
 
-  env_set REDIS_CPUS "$INFRA_REDIS_CPU" "$ENV_FILE"
-  env_set REDIS_MEMORY "$(mb_to_compose "$INFRA_REDIS_MB")" "$ENV_FILE"
-  local redis_max
-  redis_max="$(imax 32 "$((INFRA_REDIS_MB * 2 / 3))")"
-  env_set REDIS_MAXMEMORY "${redis_max}mb" "$ENV_FILE"
-
-  if [[ "$INFRA_MEILI_MB" -gt 0 ]]; then
-    env_set MEILI_CPUS "$INFRA_MEILI_CPU" "$ENV_FILE"
-    env_set MEILI_MEMORY "$(mb_to_compose "$INFRA_MEILI_MB")" "$ENV_FILE"
+  if [[ "$unlimited" -eq 1 ]]; then
+    env_set RESOURCE_PROFILE "unlimited" "$ENV_FILE"
+  else
+    env_set RESOURCE_PROFILE "auto" "$ENV_FILE"
   fi
-  if [[ "$INFRA_WS_MB" -gt 0 ]]; then
-    env_set WORKSPACE_CPUS "$INFRA_WS_CPU" "$ENV_FILE"
-    env_set WORKSPACE_MEMORY "$(mb_to_compose "$INFRA_WS_MB")" "$ENV_FILE"
-  fi
-  if [[ "$INFRA_MAIL_MB" -gt 0 ]]; then
-    env_set MAILPIT_CPUS "$INFRA_MAIL_CPU" "$ENV_FILE"
-    env_set MAILPIT_MEMORY "$(mb_to_compose "$INFRA_MAIL_MB")" "$ENV_FILE"
-  fi
-  if [[ "$INFRA_CERT_MB" -gt 0 ]]; then
-    env_set CERTBOT_CPUS "$INFRA_CERT_CPU" "$ENV_FILE"
-    env_set CERTBOT_MEMORY "$(mb_to_compose "$INFRA_CERT_MB")" "$ENV_FILE"
-  fi
-
-  env_set RESOURCE_PROFILE "auto" "$ENV_FILE"
+  env_set RESOURCE_MODE "$(resource_mode)" "$ENV_FILE"
   env_set HOST_CPUS_DETECTED "$HOST_CPUS" "$ENV_FILE"
   env_set HOST_MEM_MB_DETECTED "$HOST_MEM_MB" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
@@ -469,26 +543,46 @@ apply_app_limits() {
     return 0
   fi
 
-  app_budget "$app"
-  split_app_budget "$APP_BUDGET_MB" "$APP_BUDGET_CPU" "$runtime"
-
-  if [[ "$runtime" == "octane" ]]; then
-    env_set OCTANE_CPUS "$HTTP_CPU" "$defaults"
-    env_set OCTANE_MEMORY "$(mb_to_compose "$HTTP_MB")" "$defaults"
-    local workers
-    workers="$(awk -v c="$HTTP_CPU" 'BEGIN{w=int(c*2); if(w<1)w=1; if(w>8)w=8; print w}')"
-    env_set OCTANE_COMMAND "php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000 --workers=${workers} --task-workers=1 --max-requests=300" "$defaults"
+  if resource_mode_unlimited; then
+    if [[ "$runtime" == "octane" ]]; then
+      env_set OCTANE_CPUS 0 "$defaults"
+      env_set OCTANE_MEMORY 0 "$defaults"
+      local workers
+      workers="$(imax 1 "$(imin 8 "$HOST_CPUS")")"
+      env_set OCTANE_COMMAND "php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000 --workers=${workers} --task-workers=1 --max-requests=500" "$defaults"
+    else
+      env_set PHP_CPUS 0 "$defaults"
+      env_set PHP_MEMORY 0 "$defaults"
+    fi
+    env_set QUEUE_CPUS 0 "$defaults"
+    env_set QUEUE_MEMORY 0 "$defaults"
+    env_set REVERB_CPUS 0 "$defaults"
+    env_set REVERB_MEMORY 0 "$defaults"
+    env_set SCHEDULER_CPUS 0 "$defaults"
+    env_set SCHEDULER_MEMORY 0 "$defaults"
   else
-    env_set PHP_CPUS "$HTTP_CPU" "$defaults"
-    env_set PHP_MEMORY "$(mb_to_compose "$HTTP_MB")" "$defaults"
+    app_budget "$app"
+    split_app_budget "$APP_BUDGET_MB" "$APP_BUDGET_CPU" "$runtime"
+
+    if [[ "$runtime" == "octane" ]]; then
+      env_set OCTANE_CPUS "$HTTP_CPU" "$defaults"
+      env_set OCTANE_MEMORY "$(mb_to_compose "$HTTP_MB")" "$defaults"
+      local workers
+      workers="$(awk -v c="$HTTP_CPU" 'BEGIN{w=int(c*2); if(w<1)w=1; if(w>8)w=8; print w}')"
+      env_set OCTANE_COMMAND "php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000 --workers=${workers} --task-workers=1 --max-requests=300" "$defaults"
+    else
+      env_set PHP_CPUS "$HTTP_CPU" "$defaults"
+      env_set PHP_MEMORY "$(mb_to_compose "$HTTP_MB")" "$defaults"
+    fi
+
+    env_set QUEUE_CPUS "$QUEUE_CPU" "$defaults"
+    env_set QUEUE_MEMORY "$(mb_to_compose "$QUEUE_MB")" "$defaults"
+    env_set REVERB_CPUS "$REVERB_CPU" "$defaults"
+    env_set REVERB_MEMORY "$(mb_to_compose "$REVERB_MB")" "$defaults"
+    env_set SCHEDULER_CPUS "$SCHED_CPU" "$defaults"
+    env_set SCHEDULER_MEMORY "$(mb_to_compose "$SCHED_MB")" "$defaults"
   fi
 
-  env_set QUEUE_CPUS "$QUEUE_CPU" "$defaults"
-  env_set QUEUE_MEMORY "$(mb_to_compose "$QUEUE_MB")" "$defaults"
-  env_set REVERB_CPUS "$REVERB_CPU" "$defaults"
-  env_set REVERB_MEMORY "$(mb_to_compose "$REVERB_MB")" "$defaults"
-  env_set SCHEDULER_CPUS "$SCHED_CPU" "$defaults"
-  env_set SCHEDULER_MEMORY "$(mb_to_compose "$SCHED_MB")" "$defaults"
   # ensure weight key exists for visibility
   if [[ -z "$(env_get RESOURCE_WEIGHT "$defaults")" ]]; then
     env_set RESOURCE_WEIGHT 1 "$defaults"
@@ -534,6 +628,7 @@ write_plan_file() {
     echo "# Generated by ./dock resources — do not edit"
     echo "HOST_CPUS=$HOST_CPUS"
     echo "HOST_MEM_MB=$HOST_MEM_MB"
+    echo "RESOURCE_MODE=$(resource_mode)"
     echo "APP_N=$APP_N"
     echo "PLAN_OK=$PLAN_OK"
     echo "FPM_TOTAL_MB=$FPM_TOTAL_MB"
@@ -597,7 +692,8 @@ cmd_check() {
   if [[ "$PLAN_OK" -ne 1 ]]; then
     echo
     echo "HARD LIMIT reached — cannot safely add this app."
-    echo "Fix: free resources, disable COMPOSE_PROFILES (dev/search), or use a larger host."
+    echo "Fix: free resources, disable COMPOSE_PROFILES (dev/search), use a larger host,"
+    echo "  or set RESOURCE_MODE=unlimited in .env then ./dock resources apply (OOM risk)."
     echo "Override only with: ./dock new-app … --force"
     return 1
   fi
@@ -639,7 +735,14 @@ cmd_apply() {
   done
   write_plan_file
   echo
-  if [[ "$count" -eq 0 ]]; then
+  if resource_mode_unlimited; then
+    if [[ "$count" -eq 0 ]]; then
+      echo "Wrote RESOURCE_MODE=unlimited (no Docker CPU/RAM caps) to .env (no apps yet)."
+    else
+      echo "Wrote RESOURCE_MODE=unlimited (no Docker CPU/RAM caps) for ${count} app(s)."
+    fi
+    echo "Warning: the host OOM killer is the only safety net under memory pressure."
+  elif [[ "$count" -eq 0 ]]; then
     echo "Wrote infra limits to .env (no apps yet)."
   else
     echo "Wrote limits to .env and sites/*/defaults.env (${count} app(s))."
@@ -736,8 +839,13 @@ Per-app knobs in sites/<app>/defaults.env:
   RESOURCE_WEIGHT=2   # default 1 — 2 = roughly double the surplus share
   RESOURCE_PIN=1      # keep current PHP_/OCTANE_/QUEUE_/… limits
 
+Root .env:
+  RESOURCE_MODE=auto       # default — cgroup CPU/RAM caps from host plan
+  RESOURCE_MODE=unlimited  # no Docker limits; capacity hard-blocks become warnings
+
 Always detects the real server first (not a fixed 2CPU/4GB profile).
 Optional presets remain: ./dock profile small|medium|large
+  (presets set RESOURCE_MODE=auto)
 
 Env: HOST_CPUS_OVERRIDE, HOST_MEM_MB_OVERRIDE, RESOURCES_ASSUME_YES=1
 EOF
