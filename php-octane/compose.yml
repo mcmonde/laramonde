@@ -1,0 +1,15 @@
+# Builds the Octane/Swoole image. Not started alone — apps use this image.
+services:
+  php-octane:
+    image: ${PHP_OCTANE_IMAGE:-multiapp-php-octane}:${PHP_VERSION:-8.4}
+    build:
+      context: ./php-octane
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    profiles:
+      - build
+    networks:
+      - backend

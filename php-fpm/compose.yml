@@ -1,0 +1,15 @@
+# Builds the shared PHP-FPM image. Not started on its own — apps use this image.
+services:
+  php-fpm:
+    image: ${PHP_IMAGE:-multiapp-php}:${PHP_VERSION:-8.4}
+    build:
+      context: ./php-fpm
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    profiles:
+      - build
+    networks:
+      - backend

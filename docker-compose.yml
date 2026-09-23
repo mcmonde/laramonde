@@ -1,0 +1,50 @@
+# Laradock-style root file: shared networks/volumes + per-service includes.
+# Requires Docker Compose v2.20+ (v2.23+ recommended for deploy.resources.limits).
+# Start: ./dock setup && ./dock up
+# Add an app: ./dock new-app portal
+# Remove an app: ./dock remove-app portal
+
+name: ${COMPOSE_PROJECT_NAME:-multiapp}
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:
+  mailpit_data:
+  certbot_certs:
+
+include:
+  - path: nginx/compose.yml
+    project_directory: .
+    env_file: nginx/defaults.env
+  - path: postgres/compose.yml
+    project_directory: .
+    env_file: postgres/defaults.env
+  - path: redis/compose.yml
+    project_directory: .
+    env_file: redis/defaults.env
+  - path: meilisearch/compose.yml
+    project_directory: .
+    env_file: meilisearch/defaults.env
+  - path: mailpit/compose.yml
+    project_directory: .
+    env_file: mailpit/defaults.env
+  - path: workspace/compose.yml
+    project_directory: .
+    env_file: workspace/defaults.env
+  - path: certbot/compose.yml
+    project_directory: .
+    env_file: certbot/defaults.env
+  - path: php-fpm/compose.yml
+    project_directory: .
+    env_file: php-fpm/defaults.env
+  - path: php-octane/compose.yml
+    project_directory: .
+    env_file: php-octane/defaults.env
+  # --- apps (managed by ./dock new-app) ---

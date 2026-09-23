@@ -1,0 +1,39 @@
+services:
+  certbot:
+    image: ${CERTBOT_IMAGE:-certbot/certbot:v4.0.0}
+    restart: unless-stopped
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    networks:
+      - frontend
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap exit TERM;
+        while :; do
+          certbot renew --webroot -w /var/www/certbot --quiet || true;
+          # Permissions for unprivileged nginx (UID 101); host should also run ./dock tls:renew for reload
+          chmod 755 /etc/letsencrypt /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true;
+          find /etc/letsencrypt -name 'fullchain*.pem' -exec chmod 644 {} \; 2>/dev/null || true;
+          find /etc/letsencrypt -name 'privkey*.pem' -exec chmod 640 {} \; 2>/dev/null || true;
+          find /etc/letsencrypt -name 'privkey*.pem' -exec chown root:101 {} \; 2>/dev/null || true;
+          sleep 12h & wait $${!};
+        done
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: ${CERTBOT_CPUS:-0.5}
+          memory: ${CERTBOT_MEMORY:-256M}
+    profiles:
+      - tls

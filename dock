@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# Thin CLI around docker compose — prints every command it runs.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml")
+
+run() {
+  echo "+ $*"
+  "$@"
+}
+
+# Prefer <app>-octane, else <app>-php (FPM).
+app_http_service() {
+  local app="$1"
+  local services
+  services="$("${COMPOSE[@]}" config --services 2>/dev/null || true)"
+  if echo "$services" | grep -qx "${app}-octane"; then
+    echo "${app}-octane"
+  elif echo "$services" | grep -qx "${app}-php"; then
+    echo "${app}-php"
+  else
+    echo "No http service for app '${app}' (expected ${app}-php or ${app}-octane)." >&2
+    return 1
+  fi
+}
+
+# Artisan-style command list (aligned columns, grouped sections).
+cmd_row() {
+  printf "  %-28s %s\n" "$1" "$2"
+}
+
+usage() {
+  cat <<'EOF'
+multi-app dock
+
+Usage:
+  ./dock <command> [options] [arguments]
+
+Options:
+  -h, --help                 Display this command list
+  list                       Same as --help
+
+Available commands:
+EOF
+  cmd_row "help" "Display this command list"
+  cmd_row "list" "Display this command list"
+  cmd_row "setup" "Create .env and generate secrets"
+  cmd_row "validate" "Compose config + bash -n on scripts"
+  echo
+  echo " stack"
+  cmd_row "up [services...]" "Start stack (default: all enabled services)"
+  cmd_row "down" "Stop stack"
+  cmd_row "ps" "List containers"
+  cmd_row "logs [service]" "Follow logs"
+  cmd_row "restart [services...]" "Restart services"
+  cmd_row "build [services...]" "Build images"
+  cmd_row "config" "Render compose config (validate)"
+  cmd_row "exec <service> [cmd]" "docker compose exec"
+  echo
+  echo " app"
+  cmd_row "new-app <name> [host]" "Scaffold app (RAM/CPU check, then rescale)"
+  cmd_row "  --octane --spa --force" "--spa: / → SPA, /api → Laravel, /app → Reverb"
+  cmd_row "remove-app <name>" "Remove from stack (DB/code kept unless flags)"
+  cmd_row "  --drop-db --remove-code --force" ""
+  cmd_row "artisan <app> [args]" "Run artisan in <app>-php or <app>-octane"
+  cmd_row "composer <app> [args]" "Run composer in that app's HTTP container"
+  cmd_row "workspace" "Shell into the workspace container"
+  cmd_row "site:render <app>" "Re-render nginx site from sites/<app>/defaults.env"
+  echo
+  echo " database"
+  cmd_row "db:create <name>" "Create app Postgres db/user on a running instance"
+  cmd_row "backup" "pg_dumpall to backups/postgres/"
+  echo
+  echo " resources"
+  cmd_row "resources" "Assess host CPU/RAM capacity (default)"
+  cmd_row "resources assess" "Same as resources"
+  cmd_row "resources apply" "Write scaled limits into site defaults.env"
+  cmd_row "resources status" "Show current per-app resource plan"
+  cmd_row "resources weight <app> <n>" "Set share weight, then rescale"
+  cmd_row "resources pin <app>" "Freeze an app's limits from auto-scale"
+  cmd_row "resources unpin <app>" "Allow auto-scale again and rescale"
+  cmd_row "profile <small|medium|large>" "Apply fixed CPU/RAM preset"
+  echo
+  echo " tls"
+  cmd_row "tls:issue <app>" "Let's Encrypt cert + HTTPS nginx"
+  cmd_row "  --staging --force" ""
+  cmd_row "tls:disable <app>" "Switch app back to HTTP-only nginx"
+  cmd_row "tls:renew" "Renew all certs, fix perms, reload nginx"
+  cmd_row "tls:status [app]" "Show TLS status"
+  echo
+  cat <<'EOF'
+Unknown commands are passed through to docker compose:
+  ./dock logs -f nginx
+  ./dock pull
+EOF
+}
+
+cmd="${1:-list}"
+shift || true
+
+case "$cmd" in
+  help|-h|--help|list)
+    usage
+    ;;
+  setup)
+    run "$ROOT/scripts/setup.sh" "$@"
+    ;;
+  up)
+    run "${COMPOSE[@]}" up -d "$@"
+    ;;
+  down)
+    run "${COMPOSE[@]}" down "$@"
+    ;;
+  ps)
+    run "${COMPOSE[@]}" ps "$@"
+    ;;
+  logs)
+    run "${COMPOSE[@]}" logs -f "$@"
+    ;;
+  restart)
+    run "${COMPOSE[@]}" restart "$@"
+    ;;
+  build)
+    run "${COMPOSE[@]}" build "$@"
+    ;;
+  config)
+    run "${COMPOSE[@]}" config "$@"
+    ;;
+  workspace)
+    run "${COMPOSE[@]}" exec workspace bash
+    ;;
+  artisan)
+    app="${1:?app name required}"
+    shift
+    svc="$(app_http_service "$app")"
+    run "${COMPOSE[@]}" exec "$svc" php artisan "$@"
+    ;;
+  composer)
+    app="${1:?app name required}"
+    shift
+    svc="$(app_http_service "$app")"
+    run "${COMPOSE[@]}" exec "$svc" composer "$@"
+    ;;
+  exec)
+    run "${COMPOSE[@]}" exec "$@"
+    ;;
+  new-app)
+    run "$ROOT/scripts/new-app.sh" "$@"
+    ;;
+  remove-app)
+    run "$ROOT/scripts/remove-app.sh" "$@"
+    ;;
+  profile)
+    run "$ROOT/scripts/apply-profile.sh" "$@"
+    ;;
+  resources|scale)
+    if [[ $# -eq 0 ]]; then
+      run "$ROOT/scripts/resources.sh" assess
+    else
+      run "$ROOT/scripts/resources.sh" "$@"
+    fi
+    ;;
+  db:create)
+    app="${1:?app name required}"
+    list="$ROOT/postgres/apps.list"
+    line="$(grep -E "^${app}[[:space:]]" "$list" || true)"
+    if [[ -z "$line" ]]; then
+      echo "No entry for $app in postgres/apps.list — run ./dock new-app first."
+      exit 1
+    fi
+    db="$(echo "$line" | awk '{print $2}')"
+    user="$(echo "$line" | awk '{print $3}')"
+    pass="$(echo "$line" | awk '{print $4}')"
+    # shellcheck disable=SC1091
+    set -a
+    # shellcheck source=/dev/null
+    source "$ROOT/.env"
+    set +a
+    run "$ROOT/scripts/create-app-db.sh" "$db" "$user" "$pass"
+    ;;
+  backup)
+    run "$ROOT/scripts/backup-postgres.sh"
+    ;;
+  tls:issue)
+    run "$ROOT/scripts/tls-issue.sh" "$@"
+    ;;
+  tls:disable)
+    run "$ROOT/scripts/tls-disable.sh" "$@"
+    ;;
+  tls:renew)
+    run "$ROOT/scripts/tls-renew.sh" "$@"
+    ;;
+  tls:status)
+    run "$ROOT/scripts/tls-status.sh" "$@"
+    ;;
+  site:render)
+    run "$ROOT/scripts/render-site-nginx.sh" "$@"
+    ;;
+  validate)
+    run "$ROOT/scripts/validate.sh"
+    ;;
+  *)
+    run "${COMPOSE[@]}" "$cmd" "$@"
+    ;;
+esac

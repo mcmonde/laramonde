@@ -1,0 +1,37 @@
+services:
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31.2}
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:-}
+    volumes:
+      - mailpit_data:/data
+    command:
+      - --database
+      - /data/mailpit.db
+    ports:
+      - "${MAILPIT_UI_BIND:-127.0.0.1}:${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - frontend
+      - backend
+    expose:
+      - "1025"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: ${MAILPIT_CPUS:-0.5}
+          memory: ${MAILPIT_MEMORY:-256M}
+    profiles:
+      - dev
+      - mail

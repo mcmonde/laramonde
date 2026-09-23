@@ -1,0 +1,110 @@
+# Instantiated by ./dock new-app.
+
+x-app: &app
+  image: ${PHP_IMAGE:-multiapp-php}:${PHP_VERSION:-8.4}
+  build:
+    context: ./php-fpm
+    dockerfile: Dockerfile
+    args:
+      PHP_VERSION: ${PHP_VERSION:-8.4}
+      APP_UID: ${APP_UID:-1000}
+      APP_GID: ${APP_GID:-1000}
+  restart: unless-stopped
+  working_dir: ${APP_CODE_PATH_CONTAINER:-/var/www/apps}/__APP__
+  user: "${APP_UID:-1000}:${APP_GID:-1000}"
+  volumes:
+    - ${APP_CODE_PATH_HOST:-./apps}/__APP__:${APP_CODE_PATH_CONTAINER:-/var/www/apps}/__APP__
+  environment:
+    APP_NAME: ${APP_NAME:-__APP__}
+    APP_URL: ${APP_URL:-http://__DOMAIN__}
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: ${DB_DATABASE:-__DBIDENT__}
+    DB_USERNAME: ${DB_USERNAME:-__DBIDENT__}
+    DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in sites/__APP__/defaults.env}
+    REDIS_CLIENT: phpredis
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD — run ./dock setup}
+    REDIS_PREFIX: ${REDIS_PREFIX:-__APP___}
+    CACHE_STORE: redis
+    SESSION_DRIVER: redis
+    QUEUE_CONNECTION: redis
+    # Scout/Mail follow COMPOSE_PROFILES (synced by ./dock setup|resources apply)
+    SCOUT_DRIVER: ${SCOUT_DRIVER:-null}
+    SCOUT_PREFIX: ${SCOUT_PREFIX:-__APP___}
+    MEILISEARCH_HOST: ${MEILISEARCH_HOST:-}
+    MEILISEARCH_KEY: ${MEILI_MASTER_KEY:-}
+    MAIL_MAILER: ${MAIL_MAILER:-log}
+    MAIL_HOST: ${MAIL_HOST:-}
+    MAIL_PORT: ${MAIL_PORT:-2525}
+    BROADCAST_CONNECTION: reverb
+    REVERB_APP_ID: ${REVERB_APP_ID:-__APP__}
+    REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY}
+    REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET}
+    REVERB_HOST: 0.0.0.0
+    REVERB_PORT: "8080"
+    REVERB_SCHEME: http
+  networks:
+    - backend
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  __APP__-php:
+    <<: *app
+    networks:
+      - frontend
+      - backend
+    expose:
+      - "9000"
+    deploy:
+      resources:
+        limits:
+          cpus: ${PHP_CPUS:-2}
+          memory: ${PHP_MEMORY:-1G}
+
+  __APP__-queue:
+    <<: *app
+    command: ${APP_QUEUE_COMMAND:-php artisan queue:work --sleep=3 --tries=3 --max-time=3600}
+    deploy:
+      resources:
+        limits:
+          cpus: ${QUEUE_CPUS:-1}
+          memory: ${QUEUE_MEMORY:-512M}
+
+  __APP__-scheduler:
+    <<: *app
+    command: php artisan schedule:work
+    deploy:
+      resources:
+        limits:
+          cpus: ${SCHEDULER_CPUS:-0.5}
+          memory: ${SCHEDULER_MEMORY:-256M}
+
+  __APP__-reverb:
+    <<: *app
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    networks:
+      - frontend
+      - backend
+    expose:
+      - "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: ${REVERB_CPUS:-1}
+          memory: ${REVERB_MEMORY:-512M}

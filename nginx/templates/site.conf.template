@@ -1,0 +1,73 @@
+# Site template. ./dock new-app writes nginx/conf.d/sites/<name>.conf from this.
+
+upstream __APP___php {
+    server __APP__-php:9000;
+}
+
+upstream __APP___reverb {
+    server __APP__-reverb:8080;
+}
+
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name __DOMAIN__;
+
+    root /var/www/apps/__APP__/public;
+    index index.php;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header X-XSS-Protection "0" always;
+
+    limit_req zone=app burst=40 nodelay;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # Only the front controller is executable. Direct /vendor/*.php is denied.
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_pass __APP___php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    location ~ \.php$ {
+        deny all;
+    }
+
+    location /app {
+        proxy_pass http://__APP___reverb;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+    }
+
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    location ~* \.(env|log|sqlite|bak)$ {
+        deny all;
+    }
+}

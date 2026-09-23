@@ -1,0 +1,3 @@
+# One database per Laravel app. Copied to apps.list by ./dock new-app.
+# Format: app_name db_name db_user db_password
+# Identifiers: letters, digits, underscore. Passwords: no whitespace.

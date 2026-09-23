@@ -1,0 +1,54 @@
+services:
+  workspace:
+    image: ${WORKSPACE_IMAGE:-multiapp-workspace}:${PHP_VERSION:-8.4}
+    build:
+      context: ./workspace
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+        NODE_VERSION: ${NODE_VERSION:-22}
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    hostname: workspace
+    stdin_open: true
+    tty: true
+    working_dir: ${APP_CODE_PATH_CONTAINER:-/var/www/apps}
+    volumes:
+      - ${APP_CODE_PATH_HOST:-./apps}:${APP_CODE_PATH_CONTAINER:-/var/www/apps}
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD — run ./dock setup}
+      SCOUT_DRIVER: ${SCOUT_DRIVER:-null}
+      MEILISEARCH_HOST: ${MEILISEARCH_HOST:-}
+      MEILISEARCH_KEY: ${MEILI_MASTER_KEY:-}
+      MAIL_MAILER: ${MAIL_MAILER:-log}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-2525}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: ${WORKSPACE_CPUS:-2}
+          memory: ${WORKSPACE_MEMORY:-2G}
+    profiles:
+      - dev

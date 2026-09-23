@@ -1,0 +1,135 @@
+# SPA at / (apps/__APP__/frontend/dist) + Laravel at /api/ + Reverb at /app
+# Layout: APP_LAYOUT=spa
+
+upstream __APP___php {
+    server __APP__-php:9000;
+}
+
+upstream __APP___reverb {
+    server __APP__-reverb:8080;
+}
+
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name __DOMAIN__;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header X-XSS-Protection "0" always;
+
+    limit_req zone=app burst=40 nodelay;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+    }
+
+    # Reverb / Echo (must stay ahead of SPA catch-all)
+    location /app {
+        proxy_pass http://__APP___reverb;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    # Reverb HTTP API (Pusher protocol helpers)
+    location /apps {
+        proxy_pass http://__APP___reverb;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Laravel public storage under /api/storage
+    location ^~ /api/storage/ {
+        alias /var/www/apps/__APP__/public/storage/;
+        access_log off;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    location = /api {
+        return 301 /api/;
+    }
+
+    # Paths Laravel registers outside /api (Sanctum SPA cookie auth, Echo auth, health)
+    location ^~ /sanctum/ {
+        include fastcgi_params;
+        fastcgi_pass __APP___php;
+        fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/apps/__APP__/public;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    location ^~ /broadcasting/ {
+        include fastcgi_params;
+        fastcgi_pass __APP___php;
+        fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/apps/__APP__/public;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    location = /up {
+        include fastcgi_params;
+        fastcgi_pass __APP___php;
+        fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/apps/__APP__/public;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 60;
+    }
+
+    # Laravel front controller (API + Blade under /api)
+    location ^~ /api/ {
+        include fastcgi_params;
+        fastcgi_pass __APP___php;
+        fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/apps/__APP__/public;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param HTTPS $https if_not_empty;
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    # SPA build output (clone repo → frontend/, npm run build → frontend/dist/)
+    location / {
+        root /var/www/apps/__APP__/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    location ~* \.(env|log|sqlite|bak)$ {
+        deny all;
+    }
+}
