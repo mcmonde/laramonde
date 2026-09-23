@@ -18,9 +18,9 @@ Issues a Let's Encrypt certificate for the app's APP_DOMAIN, renders the HTTPS
 nginx config, fixes cert permissions for unprivileged nginx, and reloads nginx.
 
 Examples:
-  ./dock tls:issue hris
-  ./dock tls:issue api --staging
-  ./dock tls:issue hris --force
+  ./dock tls:issue portal
+  ./dock tls:issue portal --staging
+  ./dock tls:issue portal --force
 EOF
 }
 

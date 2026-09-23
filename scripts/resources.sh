@@ -458,6 +458,22 @@ compute_capacity() {
   CAP_LEFT_OCTANE="$(awk -v m="$CAP_MAX_OCTANE" -v u="$used_weight" 'BEGIN{ v=int(m-u); if(v<0)v=0; print v }')"
 }
 
+# Compose prefers project .env over include env_file (sites/*/defaults.env).
+# Per-app PHP_/OCTANE_/QUEUE_/… keys must not live in root .env or they shadow
+# every app (and break RESOURCE_MODE=unlimited). Strip them on apply.
+clear_root_app_limit_overrides() {
+  local key
+  for key in \
+    PHP_CPUS PHP_MEMORY PHP_MEMORY_LIMIT PHP_MAX_CHILDREN \
+    OCTANE_CPUS OCTANE_MEMORY OCTANE_COMMAND \
+    QUEUE_CPUS QUEUE_MEMORY \
+    REVERB_CPUS REVERB_MEMORY \
+    SCHEDULER_CPUS SCHEDULER_MEMORY
+  do
+    env_unset "$key" "$ENV_FILE"
+  done
+}
+
 apply_infra_to_env() {
   [[ -f "$ENV_FILE" ]] || { echo "Missing .env — run ./dock setup"; exit 1; }
 
@@ -725,6 +741,7 @@ cmd_apply() {
     return 1
   fi
   apply_infra_to_env
+  clear_root_app_limit_overrides
   sync_profile_env "$ENV_FILE"
   local app
   local count=0

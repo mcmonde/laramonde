@@ -71,6 +71,20 @@ env_set() {
   fi
 }
 
+# Remove KEY=... lines from an env file (no-op if missing).
+env_unset() {
+  local key="$1" file="$2"
+  [[ -f "$file" ]] || return 0
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    awk -v k="$key" '
+      BEGIN { prefix = k "=" }
+      index($0, prefix) == 1 { next }
+      { print }
+    ' "$file" > "${file}.tmp"
+    mv "${file}.tmp" "$file"
+  fi
+}
+
 # ---- profiles / optional services --------------------------------------------
 
 profiles_csv() {

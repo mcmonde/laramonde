@@ -38,9 +38,12 @@ chmod 600 "$ENV_FILE"
 
 echo "Applied resource profile: $NAME → $ENV_FILE"
 echo "RESOURCE_MODE reset to auto (fixed caps from profile)."
+echo "Note: per-app PHP_/OCTANE_/QUEUE_ keys in the profile apply as a shared"
+echo "  starting point; run ./dock resources apply so site defaults own those limits"
+echo "  (root .env app-limit keys are cleared on apply so they don't shadow apps)."
 echo "Scout/Mail synced from COMPOSE_PROFILES=$(profiles_csv || true)"
 echo "Recreate containers to apply limits:"
-echo "  ./dock up --force-recreate"
+echo "  ./dock resources apply && ./dock up --force-recreate"
 echo
 if [[ "$NAME" == "small" ]]; then
   echo "Small-host tips:"

@@ -29,7 +29,8 @@ cd /path/to/multi-app
 ./dock up                    # shared nginx, postgres, redis (+ profiled services)
 
 ./dock new-app portal portal.local
-# git clone your-repo apps/portal
+# Clone into apps/portal (dir has .gitkeep — use rsync or remove it first):
+#   git clone your-repo /tmp/portal && rsync -a /tmp/portal/ apps/portal/ && rm -rf /tmp/portal
 # merge sites/portal/.env.laravel.example into apps/portal/.env
 
 echo "127.0.0.1 portal.local" | sudo tee -a /etc/hosts
