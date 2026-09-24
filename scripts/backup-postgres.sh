@@ -117,11 +117,27 @@ send_alerts() {
   local body="$2"
 
   if [[ -n "${BACKUP_ALERT_WEBHOOK:-}" ]]; then
-    # Slack-compatible JSON; also works with many generic webhook receivers
     if command -v curl >/dev/null 2>&1; then
       local payload
-      payload="$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()}))' 2>/dev/null \
-        || printf '{"text":%s}' "$(printf '%s' "$body" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')")"
+      # Discord Incoming Webhooks expect {"content": "..."} (max 2000 chars).
+      # Slack-style hooks expect {"text": "..."}.
+      if [[ "${BACKUP_ALERT_WEBHOOK}" == *discord.com/api/webhooks* \
+         || "${BACKUP_ALERT_WEBHOOK}" == *discordapp.com/api/webhooks* \
+         || "${BACKUP_ALERT_PROVIDER:-}" == "discord" ]]; then
+        payload="$(SUBJECT="$subject" BODY="$body" python3 - <<'PY'
+import json, os
+subject = os.environ.get("SUBJECT", "")
+body = os.environ.get("BODY", "")
+text = f"**{subject}**\n```\n{body}\n```".strip()
+if len(text) > 1900:
+    text = text[:1900] + "\n…(truncated)"
+print(json.dumps({"content": text}))
+PY
+)"
+      else
+        payload="$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()}))' 2>/dev/null \
+          || printf '{"text":%s}' "$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      fi
       if ! curl -fsS -X POST -H 'Content-Type: application/json' \
         -d "$payload" "${BACKUP_ALERT_WEBHOOK}" >/dev/null; then
         echo "WARNING: BACKUP_ALERT_WEBHOOK POST failed" >&2
