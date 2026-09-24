@@ -70,7 +70,7 @@ EOF
   echo
   echo " database"
   cmd_row "db:create <name>" "Create app Postgres db/user on a running instance"
-  cmd_row "backup" "pg_dumpall to backups/postgres/"
+  cmd_row "backup [db]" "Per-DB Postgres dump (+ optional private Spaces upload)"
   echo
   echo " resources"
   cmd_row "resources" "Assess host CPU/RAM capacity (default)"
@@ -181,7 +181,7 @@ case "$cmd" in
     run "$ROOT/scripts/create-app-db.sh" "$db" "$user" "$pass"
     ;;
   backup)
-    run "$ROOT/scripts/backup-postgres.sh"
+    run "$ROOT/scripts/backup-postgres.sh" "$@"
     ;;
   tls:issue)
     run "$ROOT/scripts/tls-issue.sh" "$@"

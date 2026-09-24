@@ -268,8 +268,19 @@ Cron:
 
 ```bash
 0 3 * * * cd /path/to/multi-app && ./dock tls:renew >> logs/tls-renew.log 2>&1
-0 4 * * * cd /path/to/multi-app && ./dock backup >> logs/backup.log 2>&1
+0 1 * * * cd /path/to/multi-app && ./dock backup >> logs/backup.log 2>&1
 ```
+
+### Database backups
+
+- `./dock backup` — dump **each** app database (+ `globals_*.sql.gz`) into `backups/postgres/`
+- `./dock backup <db-name>` — dump one database only
+- Independent of TLS renew (use the 01:00 cron above, or run manually)
+- If `BACKUP_S3_*` is set: upload with **private ACL**, size-verify, then remove local (failed uploads stay for retry)
+- Remote retention: delete Spaces objects older than `BACKUP_S3_RETAIN_DAYS` (default **30**)
+- If Spaces is not configured: dumps stay on disk + reminder every run
+- Optional alerts: `BACKUP_ALERT_WEBHOOK` and/or `BACKUP_ALERT_EMAIL` on failure
+- `BACKUP_KEEP_LOCAL=1` keeps a local copy even after a successful Spaces upload (default `0` = delete local after verify)
 
 ## Common commands
 
@@ -285,5 +296,5 @@ Cron:
 
 - Prefer empty `COMPOSE_PROFILES` unless you need Meili/workspace/mailpit
 - Do not `FLUSHALL` on shared Redis (renamed away)
-- Back up Postgres (`./dock backup`) and Meilisearch volume if `search` is on
+- Back up Postgres per app (`./dock backup`; offsite via `BACKUP_S3_*`) and Meilisearch volume if `search` is on
 - After `--rotate-secrets`, recreate volumes or update credentials in-place if services already started with old passwords
