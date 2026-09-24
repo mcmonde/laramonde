@@ -29,6 +29,10 @@ server {
     http2 on;
     server_name __DOMAIN__;
 
+    # Host publishes 443→8443; don't leak :8443 on trailing-slash redirects
+    port_in_redirect off;
+    absolute_redirect off;
+
     ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
     ssl_session_timeout 1d;
@@ -44,7 +48,7 @@ server {
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
     add_header X-XSS-Protection "0" always;
 
-    limit_req zone=app burst=40 nodelay;
+    # Rate-limit API only — SPA loads dozens of /_nuxt chunks at once.
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -58,6 +62,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_read_timeout 86400;
@@ -71,6 +76,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
     }
 
     location ^~ /api/storage/ {
@@ -85,6 +91,7 @@ server {
     }
 
     location ^~ /sanctum/ {
+        limit_req zone=app burst=40 nodelay;
         include fastcgi_params;
         fastcgi_pass __APP___php;
         fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
@@ -100,6 +107,7 @@ server {
     }
 
     location ^~ /broadcasting/ {
+        limit_req zone=app burst=40 nodelay;
         include fastcgi_params;
         fastcgi_pass __APP___php;
         fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
@@ -128,6 +136,7 @@ server {
     }
 
     location ^~ /api/ {
+        limit_req zone=app burst=40 nodelay;
         include fastcgi_params;
         fastcgi_pass __APP___php;
         fastcgi_param SCRIPT_FILENAME /var/www/apps/__APP__/public/index.php;
@@ -144,7 +153,7 @@ server {
 
     location / {
         root /var/www/apps/__APP__/frontend/dist;
-        try_files $uri $uri/ /index.html;
+        try_files $uri/index.html $uri /index.html;
     }
 
     location ~ /\.(?!well-known) {

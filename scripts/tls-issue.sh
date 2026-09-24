@@ -119,7 +119,7 @@ if [[ "$FORCE" -eq 1 ]]; then
 fi
 
 echo "Requesting certificate for ${DOMAIN}..."
-"${COMPOSE[@]}" run --rm --entrypoint certbot --profile tls certbot "${CERTBOT_ARGS[@]}"
+"${COMPOSE[@]}" --profile tls run --rm --entrypoint certbot certbot "${CERTBOT_ARGS[@]}"
 
 "$ROOT/scripts/tls-fix-certs.sh"
 

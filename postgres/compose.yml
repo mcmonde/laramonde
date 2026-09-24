@@ -26,6 +26,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - ./postgres/apps.list:/apps.list:ro
+    ports:
+      - "${POSTGRES_PUBLISH:-127.0.0.1:5432}:5432"
     networks:
       - backend
     security_opt:

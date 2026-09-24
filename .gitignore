@@ -2,19 +2,20 @@
 .env.*
 !.env.example
 
-sites/*/defaults.env
-!sites/_template/defaults.env
-!sites/_template_octane/defaults.env
-sites/*/.env
-sites/*/.env.laravel.example
-!sites/_template/.env.laravel.example
-!sites/_template_octane/.env.laravel.example
+# Generated per-app site dirs (./dock new-app). Keep scaffolding templates only.
+sites/*
+!sites/_template/
+!sites/_template/**
+!sites/_template_octane/
+!sites/_template_octane/**
 
-# App source is cloned / bind-mounted / synced locally — keep only .gitkeep placeholders
-apps/**
-!apps/
-!apps/*/
-!apps/*/.gitkeep
+# App source is cloned / bind-mounted / deployed separately — keep placeholder only
+apps/*
+!apps/.gitkeep
+
+# Generated nginx vhosts (+ backups from re-renders)
+nginx/conf.d/sites/*
+!nginx/conf.d/sites/.gitkeep
 
 # Explicit build & dependency dirs (in case of nested checkouts)
 **/node_modules/
@@ -33,9 +34,6 @@ certbot/conf/
 
 logs/
 backups/
-
-# Local nginx toggles (empty scaffold sites disabled to avoid DNS errors)
-nginx/conf.d/sites/*.conf.disabled
 
 *.pem
 *.key

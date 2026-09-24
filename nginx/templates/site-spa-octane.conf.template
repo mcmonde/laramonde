@@ -15,13 +15,16 @@ server {
     listen [::]:8080;
     server_name __DOMAIN__;
 
+    port_in_redirect off;
+    absolute_redirect off;
+
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
     add_header X-XSS-Protection "0" always;
 
-    limit_req zone=app burst=40 nodelay;
+    # Rate-limit API only — SPA loads dozens of /_nuxt chunks at once.
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -35,6 +38,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_read_timeout 86400;
@@ -48,6 +52,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
     }
 
     location ^~ /api/storage/ {
@@ -62,12 +67,14 @@ server {
     }
 
     location ^~ /sanctum/ {
+        limit_req zone=app burst=40 nodelay;
         proxy_pass http://__APP___octane;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header Connection "";
         proxy_buffering off;
@@ -75,12 +82,14 @@ server {
     }
 
     location ^~ /broadcasting/ {
+        limit_req zone=app burst=40 nodelay;
         proxy_pass http://__APP___octane;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header Connection "";
         proxy_buffering off;
@@ -92,16 +101,19 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
         proxy_set_header Connection "";
     }
 
     location ^~ /api/ {
+        limit_req zone=app burst=40 nodelay;
         proxy_pass http://__APP___octane;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port 80;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Prefix /api;
         proxy_set_header Connection "";
@@ -112,7 +124,7 @@ server {
 
     location / {
         root /var/www/apps/__APP__/frontend/dist;
-        try_files $uri $uri/ /index.html;
+        try_files $uri/index.html $uri /index.html;
     }
 
     location ~ /\.(?!well-known) {

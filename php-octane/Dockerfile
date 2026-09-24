@@ -24,6 +24,19 @@ RUN install-php-extensions \
         swoole \
     && rm -rf /tmp/pear /var/cache/apt /var/lib/apt/lists/*
 
+# PDF signature sidecar (apps/*/python/pdf_signature) — invoked by Octane via Process
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        python3-pip \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        libjpeg62-turbo \
+        zlib1g \
+        libffi8 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY conf/php.ini /usr/local/etc/php/conf.d/99-hardening.ini
 COPY conf/opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 

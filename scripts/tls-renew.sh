@@ -18,7 +18,7 @@ if [[ "${CERTBOT_STAGING:-0}" == "1" ]]; then
 fi
 
 echo "Renewing certificates..."
-"${COMPOSE[@]}" run --rm --entrypoint certbot --profile tls certbot renew \
+"${COMPOSE[@]}" --profile tls run --rm --entrypoint certbot certbot renew \
   --webroot -w /var/www/certbot \
   "${STAGING_ARGS[@]}" \
   --non-interactive
