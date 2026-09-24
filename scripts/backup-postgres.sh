@@ -11,8 +11,9 @@
 #   - gzip -t + non-empty size before treating a dump as good
 #   - upload with ACL private → .tmp key → finalize → HEAD size check
 #   - only delete locals that uploaded successfully; leave failures for retry
+#   - local disk is staging only — never keep successful uploads on the server
 #   - prune Spaces objects older than BACKUP_S3_RETAIN_DAYS (default 30)
-#   - warn every run when Spaces is not configured
+#   - warn + fail when Spaces is not configured (so cron/alerts notice)
 #   - alert webhook/email on failure
 set -euo pipefail
 
@@ -166,20 +167,28 @@ spaces_configured() {
 }
 
 remind_spaces() {
-  cat >&2 <<'EOF'
-WARNING: DigitalOcean Spaces / S3 backup upload is NOT configured.
-  Set these in the root .env to enable offsite copies:
+  if [[ "${BACKUP_REQUIRE_SPACES:-0}" == "1" ]]; then
+    cat >&2 <<'EOF'
+ERROR: DigitalOcean Spaces is NOT configured, but BACKUP_REQUIRE_SPACES=1.
+  Staging/production expect offsite copies. Set BACKUP_S3_* in the root .env:
     BACKUP_S3_ENDPOINT=https://<region>.digitaloceanspaces.com
     BACKUP_S3_REGION=<region>
     BACKUP_S3_BUCKET=<bucket>
-    BACKUP_S3_PREFIX=laramonde/postgres   # optional
+    BACKUP_S3_PREFIX=laramonde/postgres
     BACKUP_S3_ACCESS_KEY_ID=...
     BACKUP_S3_SECRET_ACCESS_KEY=...
-    BACKUP_S3_RETAIN_DAYS=30              # optional, default 30
-  Local dumps will be kept under backups/postgres/ until Spaces is configured
-  and a later run uploads them successfully.
+    BACKUP_S3_RETAIN_DAYS=30
+  Dumps from this run stay under backups/postgres/ for retry after Spaces is set.
 EOF
-  note_alert "Spaces not configured — dumps kept local only"
+    note_alert "Spaces not configured while BACKUP_REQUIRE_SPACES=1"
+  else
+    cat >&2 <<'EOF'
+INFO: DigitalOcean Spaces is not configured (normal for local/dev).
+  Dumps stay under backups/postgres/ on this machine.
+  Staging/production: set BACKUP_S3_* and BACKUP_REQUIRE_SPACES=1 so uploads
+  are required and server disk is cleared after a successful private upload.
+EOF
+  fi
 }
 
 s3_aws() {
@@ -219,7 +228,8 @@ s3_key_for() {
   fi
 }
 
-# Upload one local file privately; verify remote size; delete local on success.
+# Upload one local file privately; verify remote size; always delete local on success.
+# Server disk is staging only — successful uploads must not linger.
 upload_one() {
   local local_path="$1"
   local filename base_key tmp_key remote_size local_size upload_src
@@ -236,7 +246,7 @@ upload_one() {
   echo "  → uploading (private) s3://${BACKUP_S3_BUCKET}/${base_key}"
   if ! s3_aws s3 cp "$upload_src" "s3://${BACKUP_S3_BUCKET}/${tmp_key}" \
     --acl private --only-show-errors; then
-    echo "  ERROR: upload failed for $filename" >&2
+    echo "  ERROR: upload failed for $filename (keeping local for retry)" >&2
     note_alert "Upload failed: $filename"
     s3_aws s3 rm "s3://${BACKUP_S3_BUCKET}/${tmp_key}" --only-show-errors 2>/dev/null || true
     return 1
@@ -244,7 +254,7 @@ upload_one() {
 
   if ! s3_aws s3 mv "s3://${BACKUP_S3_BUCKET}/${tmp_key}" "s3://${BACKUP_S3_BUCKET}/${base_key}" \
     --only-show-errors; then
-    echo "  ERROR: finalize (mv) failed for $filename" >&2
+    echo "  ERROR: finalize (mv) failed for $filename (keeping local for retry)" >&2
     note_alert "Finalize failed: $filename"
     s3_aws s3 rm "s3://${BACKUP_S3_BUCKET}/${tmp_key}" --only-show-errors 2>/dev/null || true
     return 1
@@ -258,23 +268,18 @@ upload_one() {
     --query ContentLength --output text 2>/dev/null || true)"
   remote_size="$(printf '%s' "$remote_size" | tr -d '[:space:]')"
   if [[ -z "$remote_size" || "$remote_size" == "None" ]]; then
-    echo "  ERROR: could not HEAD remote object for $filename — keeping local" >&2
+    echo "  ERROR: could not HEAD remote object for $filename — keeping local for retry" >&2
     note_alert "HEAD failed after upload: $filename"
     return 1
   fi
   if [[ "$remote_size" != "$local_size" ]]; then
-    echo "  ERROR: size mismatch for $filename (local=$local_size remote=$remote_size) — keeping local" >&2
+    echo "  ERROR: size mismatch for $filename (local=$local_size remote=$remote_size) — keeping local for retry" >&2
     note_alert "Size mismatch: $filename local=$local_size remote=$remote_size"
     return 1
   fi
 
-  echo "  ✓ uploaded private + verified ($local_size bytes)"
-  if [[ "${BACKUP_KEEP_LOCAL:-0}" == "1" ]]; then
-    echo "  (BACKUP_KEEP_LOCAL=1 — leaving local copy)"
-  else
-    rm -f "$local_path"
-    echo "  ✓ removed local $filename"
-  fi
+  rm -f "$local_path"
+  echo "  ✓ uploaded private + verified ($local_size bytes); removed local staging copy"
   return 0
 }
 
@@ -414,11 +419,13 @@ if [[ ${#CREATED_FILES[@]} -eq 0 ]]; then
 fi
 
 echo "Created ${#CREATED_FILES[@]} dump file(s) (${DUMP_ERRORS} dump error(s))"
+echo "Policy: server keeps dumps only until Spaces upload succeeds; next cron/manual run retries leftovers."
 
 # ---- upload or remind --------------------------------------------------------
 
 UPLOAD_FAILS=0
 UPLOAD_OK=0
+SPACES_MISSING=0
 
 if spaces_configured; then
   echo "Spaces: bucket=${BACKUP_S3_BUCKET} prefix=$(s3_prefix) endpoint=${BACKUP_S3_ENDPOINT} acl=private retain_days=${RETAIN_DAYS}"
@@ -428,6 +435,10 @@ if spaces_configured; then
     TO_UPLOAD+=("$f")
   done < <(find "$OUT_DIR" -maxdepth 1 -type f -name '*.sql.gz' -print0 | sort -z)
 
+  if [[ ${#TO_UPLOAD[@]} -gt ${#CREATED_FILES[@]} ]]; then
+    echo "Also retrying $(( ${#TO_UPLOAD[@]} - ${#CREATED_FILES[@]} )) leftover staging file(s) from earlier failed uploads."
+  fi
+
   for f in "${TO_UPLOAD[@]+"${TO_UPLOAD[@]}"}"; do
     if upload_one "$f"; then
       UPLOAD_OK=$((UPLOAD_OK + 1))
@@ -436,9 +447,10 @@ if spaces_configured; then
     fi
   done
 
-  echo "Upload summary: ${UPLOAD_OK} ok, ${UPLOAD_FAILS} failed (failed files kept locally for retry)"
+  echo "Upload summary: ${UPLOAD_OK} ok, ${UPLOAD_FAILS} failed (failed files kept locally for next run)"
   prune_remote
 else
+  SPACES_MISSING=1
   remind_spaces
   echo "Local dumps retained:"
   for f in "${CREATED_FILES[@]}"; do
@@ -446,7 +458,32 @@ else
   done
 fi
 
-if [[ "$DUMP_ERRORS" -gt 0 || "$UPLOAD_FAILS" -gt 0 ]]; then
+# Report staging leftovers (meaningful when Spaces is in use)
+REMAINING=0
+while IFS= read -r -d '' _; do
+  REMAINING=$((REMAINING + 1))
+done < <(find "$OUT_DIR" -maxdepth 1 -type f -name '*.sql.gz' -print0 2>/dev/null || true)
+
+if spaces_configured; then
+  if [[ "$REMAINING" -eq 0 ]]; then
+    echo "Server staging clear — no backup files left on disk."
+  else
+    echo "WARNING: ${REMAINING} staging file(s) still on server (upload failed):"
+    find "$OUT_DIR" -maxdepth 1 -type f -name '*.sql.gz' -printf '  - %f (%k KB)\n' 2>/dev/null \
+      || find "$OUT_DIR" -maxdepth 1 -type f -name '*.sql.gz' -exec ls -la {} \;
+    note_alert "${REMAINING} staging file(s) remain on server"
+  fi
+else
+  echo "Local/dev mode: ${REMAINING} dump file(s) on disk under ${OUT_DIR}"
+fi
+
+# Spaces missing is only a hard failure when required (staging/prod)
+SPACES_REQUIRED_FAIL=0
+if [[ "$SPACES_MISSING" -eq 1 && "${BACKUP_REQUIRE_SPACES:-0}" == "1" ]]; then
+  SPACES_REQUIRED_FAIL=1
+fi
+
+if [[ "$DUMP_ERRORS" -gt 0 || "$UPLOAD_FAILS" -gt 0 || "$SPACES_REQUIRED_FAIL" -eq 1 ]]; then
   finish_with_status 1
 fi
 

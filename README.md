@@ -275,12 +275,10 @@ Cron:
 
 - `./dock backup` — dump **each** app database (+ `globals_*.sql.gz`) into `backups/postgres/`
 - `./dock backup <db-name>` — dump one database only
-- Independent of TLS renew (use the 01:00 cron above, or run manually)
-- If `BACKUP_S3_*` is set: upload with **private ACL**, size-verify, then remove local (failed uploads stay for retry)
-- Remote retention: delete Spaces objects older than `BACKUP_S3_RETAIN_DAYS` (default **30**)
-- If Spaces is not configured: dumps stay on disk + reminder every run
+- Independent of TLS renew (01:00 cron above, or run manually)
+- **Local/dev:** leave `BACKUP_S3_*` unset, `BACKUP_REQUIRE_SPACES=0` (default) → dumps stay on disk, exit 0, no upload
+- **Staging/prod:** set `BACKUP_S3_*` + `BACKUP_REQUIRE_SPACES=1` → private upload → verify → delete local; leftovers retried next run; prune after `BACKUP_S3_RETAIN_DAYS` (default **30**)
 - Optional alerts: `BACKUP_ALERT_WEBHOOK` and/or `BACKUP_ALERT_EMAIL` on failure
-- `BACKUP_KEEP_LOCAL=1` keeps a local copy even after a successful Spaces upload (default `0` = delete local after verify)
 
 ## Common commands
 
