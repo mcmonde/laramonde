@@ -260,6 +260,7 @@ Warning: under memory pressure the **kernel OOM killer** may stop Postgres/Redis
 # .env: NGINX_BIND=0.0.0.0, CERTBOT_EMAIL=you@example.com, CERTBOT_STAGING=0
 ./dock tls:issue portal
 ./dock tls:status
+./dock tls:certs
 ./dock tls:renew
 ./dock tls:disable portal
 ```

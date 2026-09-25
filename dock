@@ -88,6 +88,7 @@ EOF
   cmd_row "  --staging --force" ""
   cmd_row "tls:disable <app>" "Switch app back to HTTP-only nginx"
   cmd_row "tls:renew" "Renew all certs, fix perms, reload nginx"
+  cmd_row "tls:certs" "List Let's Encrypt certs + days remaining"
   cmd_row "tls:status [app]" "Show TLS status"
   echo
   cat <<'EOF'
@@ -191,6 +192,9 @@ case "$cmd" in
     ;;
   tls:renew)
     run "$ROOT/scripts/tls-renew.sh" "$@"
+    ;;
+  tls:certs)
+    run "${COMPOSE[@]}" --profile tls run --rm --entrypoint certbot certbot certificates "$@"
     ;;
   tls:status)
     run "$ROOT/scripts/tls-status.sh" "$@"
