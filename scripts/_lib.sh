@@ -128,6 +128,63 @@ sync_profile_env() {
   fi
 }
 
+# Prefer public IPv4 (DO metadata → ipify → hostname -I). Used for backup S3 prefix.
+detect_server_ipv4() {
+  local ip=""
+  local url
+
+  ip="$(curl -fsS --max-time 2 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true)"
+  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '%s\n' "$ip"
+    return 0
+  fi
+
+  for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
+    ip="$(curl -4 -fsS --max-time 3 "$url" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      printf '%s\n' "$ip"
+      return 0
+    fi
+  done
+
+  ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^127\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|^192\.168\.' | head -1 || true)"
+  if [[ -z "$ip" ]]; then
+    ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -1 || true)"
+  fi
+  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '%s\n' "$ip"
+    return 0
+  fi
+  return 1
+}
+
+# Set BACKUP_S3_PREFIX=database-backups/<ipv4> when unset or still a placeholder.
+ensure_backup_s3_prefix() {
+  local env_file="${1:-$ROOT/.env}"
+  local current ip want
+
+  [[ -f "$env_file" ]] || return 0
+
+  current="$(env_get BACKUP_S3_PREFIX "$env_file")"
+  # Already a concrete prefix (has an IPv4 and no placeholder markers)
+  if [[ -n "$current" \
+    && "$current" != *'<server-ip-address'* \
+    && "$current" != *'<auto-filled'* \
+    && "$current" =~ [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    echo "Keeping BACKUP_S3_PREFIX=${current}"
+    return 0
+  fi
+
+  if ! ip="$(detect_server_ipv4)"; then
+    echo "WARNING: could not detect server IPv4 — leave BACKUP_S3_PREFIX unset or set it manually."
+    return 0
+  fi
+
+  want="database-backups/${ip}"
+  env_set BACKUP_S3_PREFIX "$want" "$env_file"
+  echo "Set BACKUP_S3_PREFIX=${want}"
+}
+
 # ---- apps --------------------------------------------------------------------
 
 site_defaults() {

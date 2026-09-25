@@ -66,6 +66,8 @@ fi
 sync_profile_env "$ENV_FILE"
 echo "Synced Scout/Mail env from COMPOSE_PROFILES=$(profiles_csv || true)"
 
+ensure_backup_s3_prefix "$ENV_FILE"
+
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$ROOT/certbot/www" "$ROOT/nginx/conf.d/sites" "$ROOT/apps" "$ROOT/backups/postgres" "$ROOT/logs"

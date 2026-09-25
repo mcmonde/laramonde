@@ -190,7 +190,7 @@ ERROR: DigitalOcean Spaces is NOT configured, but BACKUP_REQUIRE_SPACES=1.
     BACKUP_S3_ENDPOINT=https://<region>.digitaloceanspaces.com
     BACKUP_S3_REGION=<region>
     BACKUP_S3_BUCKET=<bucket>
-    BACKUP_S3_PREFIX=laramonde/postgres
+    BACKUP_S3_PREFIX=database-backups/<server-ip>   # set by ./dock setup
     BACKUP_S3_ACCESS_KEY_ID=...
     BACKUP_S3_SECRET_ACCESS_KEY=...
     BACKUP_S3_RETAIN_DAYS=30
@@ -227,7 +227,16 @@ s3_aws() {
 }
 
 s3_prefix() {
-  local prefix="${BACKUP_S3_PREFIX:-laramonde/postgres}"
+  local prefix="${BACKUP_S3_PREFIX:-}"
+  if [[ -z "$prefix" || "$prefix" == *'<server-ip'* || "$prefix" == *'<auto-filled'* ]]; then
+    local ip=""
+    ip="$(detect_server_ipv4 2>/dev/null || true)"
+    if [[ -n "$ip" ]]; then
+      prefix="database-backups/${ip}"
+    else
+      prefix="database-backups/unknown-host"
+    fi
+  fi
   prefix="${prefix#/}"
   prefix="${prefix%/}"
   printf '%s' "$prefix"
