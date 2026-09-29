@@ -49,7 +49,7 @@ is_weak_secret() {
 
 env_get() {
   local key="$1" file="$2"
-  grep -E "^${key}=" "$file" 2>/dev/null | head -n1 | cut -d= -f2-
+  { grep -E "^${key}=" "$file" 2>/dev/null || true; } | head -n1 | cut -d= -f2-
 }
 
 # Replace or append KEY=value. Safe when values contain '=' (unlike FS="=" awk).

@@ -22,6 +22,22 @@ RUN install-php-extensions \
         exif \
     && rm -rf /tmp/pear /var/cache/apt /var/lib/apt/lists/*
 
+# Runtime libs + fonts for wkhtmltopdf/wkhtmltoimage (e.g. h4cc/wkhtmltopdf-amd64 via laravel-snappy)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libxrender1 \
+        libxext6 \
+        libx11-6 \
+        libfontconfig1 \
+        libfreetype6 \
+        libjpeg62-turbo \
+        libpng16-16 \
+        fontconfig \
+        fonts-dejavu-core \
+        xfonts-75dpi \
+        xfonts-base \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY conf/php.ini /usr/local/etc/php/conf.d/99-hardening.ini
 COPY conf/opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 COPY conf/www.conf /usr/local/etc/php-fpm.d/zz-www.conf
