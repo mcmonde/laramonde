@@ -11,16 +11,18 @@ APP=""
 DOMAIN=""
 FORCE=0
 SKIP_SCALE=0
+APP_PHP=""
 
 usage() {
   cat <<'EOF'
-Usage: new-app.sh <app-name> [domain] [--octane] [--spa] [--force] [--skip-scale]
+Usage: new-app.sh <app-name> [domain] [--octane] [--spa] [--php X.Y] [--force] [--skip-scale]
 
 Before creating an app, detects host CPU/RAM and checks whether another app
 fits. On success, rescales infra + all apps' container limits.
 
   --octane       Scaffold Octane/Swoole instead of PHP-FPM
   --spa          Path layout: / → frontend/dist, /api → Laravel, /app → Reverb
+  --php X.Y      PHP version for this app (8.1–8.5; default: PHP_VERSION in .env)
   --force        Create even if the resource check fails (not recommended)
   --skip-scale   Skip auto resource check/rescale
 
@@ -28,6 +30,7 @@ Examples:
   ./dock new-app portal
   ./dock new-app portal portal.local --spa
   ./dock new-app api api.example.com --octane --spa
+  ./dock new-app legacy legacy.example.com --php 8.3
   ./dock new-app billing bill.example.com --force
 EOF
 }
@@ -37,6 +40,10 @@ while [[ $# -gt 0 ]]; do
     --octane|-o) RUNTIME="octane"; shift ;;
     --fpm) RUNTIME="fpm"; shift ;;
     --spa) LAYOUT="spa"; shift ;;
+    --php)
+      [[ $# -ge 2 ]] || { echo "--php needs a version, e.g. --php 8.3"; exit 1; }
+      APP_PHP="$2"; shift 2 ;;
+    --php=*) APP_PHP="${1#--php=}"; shift ;;
     --force|-f) FORCE=1; shift ;;
     --skip-scale) SKIP_SCALE=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -144,6 +151,12 @@ set -a
 source "$ROOT/.env"
 set +a
 
+APP_PHP="${APP_PHP:-${PHP_VERSION:-8.4}}"
+if [[ ! "$APP_PHP" =~ ^8\.[1-5]$ ]]; then
+  echo "Unsupported PHP version '$APP_PHP' (use 8.1–8.5)."
+  exit 1
+fi
+
 DB_PASSWORD="$(rand_hex 32)"
 REVERB_KEY="$(rand_hex 16)"
 REVERB_SECRET="$(rand_hex 32)"
@@ -165,6 +178,7 @@ env_set REVERB_APP_KEY "$REVERB_KEY" "$SITE_DIR/defaults.env"
 env_set REVERB_APP_SECRET "$REVERB_SECRET" "$SITE_DIR/defaults.env"
 env_set APP_TLS 0 "$SITE_DIR/defaults.env"
 env_set APP_RUNTIME "$RUNTIME" "$SITE_DIR/defaults.env"
+env_set APP_PHP_VERSION "$APP_PHP" "$SITE_DIR/defaults.env"
 env_set APP_LAYOUT "$LAYOUT" "$SITE_DIR/defaults.env"
 env_set APP_DOMAIN "$DOMAIN" "$SITE_DIR/defaults.env"
 if [[ "$LAYOUT" == "spa" ]]; then
@@ -220,7 +234,7 @@ cat > "$CODE_DIR/.gitkeep" <<EOF
 EOF
 
 echo
-echo "Created app: $APP (runtime=${RUNTIME}, layout=${LAYOUT})"
+echo "Created app: $APP (runtime=${RUNTIME}, layout=${LAYOUT}, php=${APP_PHP})"
 echo "  site config : $SITE_DIR"
 echo "  nginx       : nginx/conf.d/sites/${APP}.conf"
 echo "  code dir    : $CODE_DIR"

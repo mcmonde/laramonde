@@ -4,6 +4,8 @@ Laradock-style Docker stack for **multiple Laravel apps** on one host: shared ng
 
 Same folder-per-service layout as Laradock v18 (`compose.yml` + `defaults.env`), but smaller, current images, and locked down by default.
 
+**Full guides live in [`docs/`](docs/README.md):** [getting started](docs/01-getting-started.md) · [production server](docs/02-production.md) · [managing apps](docs/03-apps.md) · [migrating an existing app](docs/04-migrating-an-app.md) · [backups and restore](docs/05-backups-and-restore.md) · [Meilisearch](docs/06-meilisearch.md) · [troubleshooting](docs/07-troubleshooting.md). This README is the quick reference.
+
 ## Layout
 
 ```text
@@ -96,17 +98,25 @@ Then `./dock setup` (or `resources apply`) sets Scout→null and Mail→log. Sta
 
 ## Per-app PHP versions
 
+```bash
+./dock new-app portal portal.local --php 8.3   # default: PHP_VERSION in .env
+```
+
+Stored per app as `APP_PHP_VERSION` (not `PHP_VERSION`, which the root `.env` would override):
+
 ```env
 # sites/portal/defaults.env
-PHP_VERSION=8.1
+APP_PHP_VERSION=8.3
 ```
 
 Supported: **8.1–8.5**. After changing:
 
 ```bash
 ./dock build portal-php
-./dock up portal-php portal-queue portal-reverb portal-scheduler
+./dock up --force-recreate portal-php portal-queue portal-reverb portal-scheduler
 ```
+
+Apps created before `APP_PHP_VERSION` existed keep using the root `PHP_VERSION`. Details: [docs/03-apps.md](docs/03-apps.md#per-app-php-versions).
 
 ## Octane + Swoole
 

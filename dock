@@ -61,6 +61,7 @@ EOF
   echo " app"
   cmd_row "new-app <name> [host]" "Scaffold app (RAM/CPU check, then rescale)"
   cmd_row "  --octane --spa --force" "--spa: / → SPA, /api → Laravel, /app → Reverb"
+  cmd_row "  --php X.Y" "Per-app PHP 8.1–8.5 (default: PHP_VERSION in .env)"
   cmd_row "remove-app <name>" "Remove from stack (DB/code kept unless flags)"
   cmd_row "  --drop-db --remove-code --force" ""
   cmd_row "artisan <app> [args]" "Run artisan in <app>-php or <app>-octane"

@@ -1,12 +1,12 @@
 # Instantiated by ./dock new-app.
 
 x-app: &app
-  image: ${PHP_IMAGE:-multiapp-php}:${PHP_VERSION:-8.4}
+  image: ${PHP_IMAGE:-multiapp-php}:${APP_PHP_VERSION:-${PHP_VERSION:-8.4}}
   build:
     context: ./php-fpm
     dockerfile: Dockerfile
     args:
-      PHP_VERSION: ${PHP_VERSION:-8.4}
+      PHP_VERSION: ${APP_PHP_VERSION:-${PHP_VERSION:-8.4}}
       APP_UID: ${APP_UID:-1000}
       APP_GID: ${APP_GID:-1000}
   restart: unless-stopped
