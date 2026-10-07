@@ -12,6 +12,13 @@ for f in scripts/*.sh; do
   echo "  ok $f"
 done
 
+echo "== install-extras copies =="
+if ! cmp -s php-fpm/install-extras.sh php-octane/install-extras.sh; then
+  echo "  php-fpm/install-extras.sh and php-octane/install-extras.sh differ — keep them identical"
+  exit 1
+fi
+echo "  ok (identical)"
+
 echo "== docker compose config =="
 if [[ ! -f .env ]]; then
   echo "No .env — copying .env.example for validation only"

@@ -45,6 +45,13 @@ RUN groupmod -o -g "${APP_GID}" www-data \
     && mkdir -p /var/www/html /var/www/apps \
     && chown -R www-data:www-data /var/www/html /var/www/apps
 
+# Per-app extras (sites/<app>/defaults.env, see ./dock extras). Keep this the last root step:
+# every layer above is shared with the plain image, so an app image only adds this layer.
+ARG APP_PHP_EXTENSIONS=""
+ARG APP_APT_PACKAGES=""
+COPY --chmod=755 install-extras.sh /usr/local/bin/install-extras
+RUN install-extras "$APP_PHP_EXTENSIONS" "$APP_APT_PACKAGES"
+
 WORKDIR /var/www/html
 
 USER www-data

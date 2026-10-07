@@ -1,9 +1,22 @@
 # Managing apps
 
+## Scan the repo first
+
+Before `new-app`, check what the app needs:
+
+```bash
+./dock scan-app git@bitbucket.org:team/api.git --branch dev   # or a local path
+```
+
+It reports the Laravel version, which PHP versions `composer.lock` allows, Octane/SPA/Reverb/queue/scheduler/Meilisearch needs, **PHP extensions missing from the shared image**, system packages some libraries need (wkhtmltopdf, Ghostscript, Chromium, ffmpeg, …), and heavy packages that are installed but never referenced in the app's code. It ends with a suggested `new-app` command.
+
+When the shared image for that PHP version is built, the extension check runs Composer inside it (`check-platform-reqs`, or a dry-run resolve when there is no `composer.lock`), so transitive requirements are caught too. Otherwise it falls back to reading the Dockerfile. `--no-docker` forces the static scan.
+
 ## Creating an app
 
 ```bash
-./dock new-app <name> [domain] [--octane] [--spa] [--php X.Y] [--force] [--skip-scale]
+./dock new-app <name> [domain] [--octane] [--spa] [--php X.Y]
+               [--php-ext "a b"] [--apt "x y"] [--force] [--skip-scale]
 ```
 
 | Argument | Notes |
@@ -11,6 +24,8 @@
 | `<name>` | Lowercase letters, digits, hyphens. The database and role become `<name>` with `-` → `_` |
 | `[domain]` | Defaults to `<name>.local`. Change later in `sites/<name>/defaults.env` (`APP_DOMAIN`) + `./dock site:render <name>` |
 | `--php X.Y` | 8.1–8.5. Default: `PHP_VERSION` in `.env` |
+| `--php-ext "a b"` | Extra PHP extensions for this app only ([per-app extras](#per-app-extensions-and-packages)) |
+| `--apt "x y"` | Extra Debian packages for this app only |
 | `--octane` | Swoole HTTP server (`<name>-octane`, port 8000) instead of PHP-FPM (`<name>-php`, port 9000) |
 | `--spa` | `/` → `apps/<name>/frontend/dist`, `/api` → Laravel, `/app` → Reverb |
 | `--force` | Create even when the capacity check fails |
@@ -49,6 +64,25 @@ Change an existing app:
 ```
 
 Images are tagged by version (`multiapp-php:8.3`, `multiapp-php-octane:8.4`), so apps on the same version share one image.
+
+## Per-app extensions and packages
+
+`php-fpm/Dockerfile` and `php-octane/Dockerfile` hold only what most Laravel apps need, because every app on that PHP version is built from them. Anything one app needs goes into that app's settings instead:
+
+```bash
+./dock extras hcdcresearch --php-ext imagick --apt ghostscript   # set (or use --php-ext/--apt on new-app)
+./dock extras hcdcresearch                                       # show
+./dock extras hcdcresearch --clear                               # back to the shared image
+./dock up --build --force-recreate hcdcresearch-php hcdcresearch-queue hcdcresearch-scheduler
+docker compose exec nginx nginx -s reload                        # containers got new IPs
+```
+
+This writes `APP_PHP_EXTENSIONS`, `APP_APT_PACKAGES` and `APP_IMAGE_SUFFIX` to `sites/<app>/defaults.env`. The app then builds its own tag (`multiapp-php:8.4-hcdcresearch`) from the same Dockerfile; the extras step is the last layer, so everything above it is the identical, shared layer and the app image only costs its extras on disk. Apps without extras keep using the plain shared image.
+
+- PHP extension names are [install-php-extensions](https://github.com/mlocati/docker-php-extension-installer#supported-php-extensions) names (`imagick`, `soap`, `ldap`, `mongodb`, …).
+- When ImageMagick is installed, its PDF/PS policy is relaxed automatically (needed by `spatie/pdf-to-image`; add `ghostscript` too).
+- Apps created before this feature: `./dock extras` upgrades their `sites/<app>/compose.yml` (backup `compose.yml.bak-extras`).
+- Prefer removing a package the app never uses over adding extras for it — `scan-app` flags those.
 
 ## Octane
 

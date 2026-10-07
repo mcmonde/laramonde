@@ -76,7 +76,7 @@ curl -s -D - -o /dev/null -X POST https://app.example.com/api/login | grep -i -E
 
 ## Containers show `unhealthy` but work
 
-Queue, scheduler and Reverb containers inherit the PHP image's healthcheck, which probes the FPM/Octane port they never open. Override it per service in `sites/<app>/compose.yml`:
+Queue, scheduler and Reverb containers inherit the PHP image's healthcheck, which probes the FPM/Octane port they never open. Apps created from the current templates already override it; for older apps, add it per service in `sites/<app>/compose.yml`:
 
 ```yaml
   myapp-queue:

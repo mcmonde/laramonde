@@ -118,6 +118,16 @@ Supported: **8.1–8.5**. After changing:
 
 Apps created before `APP_PHP_VERSION` existed keep using the root `PHP_VERSION`. Details: [docs/03-apps.md](docs/03-apps.md#per-app-php-versions).
 
+## Scanning an app and per-app extras
+
+```bash
+./dock scan-app git@bitbucket.org:team/api.git --branch dev   # needs: PHP, extensions, apt packages, flags
+./dock new-app api api.example.com --php-ext imagick --apt ghostscript
+./dock extras api --php-ext imagick --apt ghostscript        # same for an existing app
+```
+
+The shared PHP images stay lean; an app with extras gets its own tag (`multiapp-php:8.4-api`) that reuses every shared layer and adds only its extras. Details: [docs/03-apps.md](docs/03-apps.md#per-app-extensions-and-packages).
+
 ## Octane + Swoole
 
 ```bash

@@ -35,6 +35,7 @@ Start the shared services:
 ## 2. Add an app
 
 ```bash
+./dock scan-app ../portal          # optional: what PHP version, extensions and flags it needs
 ./dock new-app portal portal.local
 ```
 
@@ -45,6 +46,7 @@ Options you may need (details in [Managing apps](03-apps.md)):
 | `--php 8.3` | PHP version for this app (8.1–8.5). Default: `PHP_VERSION` in `.env` |
 | `--octane` | Laravel Octane (Swoole) instead of PHP-FPM |
 | `--spa` | `/` serves a built SPA, `/api` goes to Laravel |
+| `--php-ext "imagick"` / `--apt "ghostscript"` | Extensions/packages only this app needs (app-specific image tag) |
 
 This creates:
 

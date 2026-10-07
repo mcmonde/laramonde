@@ -18,6 +18,8 @@ du -sh storage/app                                 # uploads to copy
 crontab -l                                         # is schedule:run actually running?
 ```
 
+Then scan the repo on `NEW` (`./dock scan-app <repo-url> --branch <branch>`): it checks PHP constraints from `composer.lock`, missing extensions and system packages, and suggests the `new-app` flags. See [Scan the repo first](03-apps.md#scan-the-repo-first).
+
 Decide:
 
 - **PHP version:** match what production runs today (`--php 8.3`), not only what the framework documentation says. Check `composer.lock` for packages requiring `php >= 8.2`.

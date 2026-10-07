@@ -62,6 +62,9 @@ EOF
   cmd_row "new-app <name> [host]" "Scaffold app (RAM/CPU check, then rescale)"
   cmd_row "  --octane --spa --force" "--spa: / → SPA, /api → Laravel, /app → Reverb"
   cmd_row "  --php X.Y" "Per-app PHP 8.1–8.5 (default: PHP_VERSION in .env)"
+  cmd_row "  --php-ext \"a b\" --apt \"x y\"" "Per-app extensions/packages (own image tag)"
+  cmd_row "scan-app <repo-url|path>" "Report what an app needs before new-app"
+  cmd_row "extras <app> [opts]" "Show/set per-app --php-ext/--apt, --clear"
   cmd_row "remove-app <name>" "Remove from stack (DB/code kept unless flags)"
   cmd_row "  --drop-db --remove-code --force" ""
   cmd_row "artisan <app> [args]" "Run artisan in <app>-php or <app>-octane"
@@ -150,6 +153,12 @@ case "$cmd" in
     ;;
   new-app)
     run "$ROOT/scripts/new-app.sh" "$@"
+    ;;
+  scan-app)
+    run "$ROOT/scripts/scan-app.sh" "$@"
+    ;;
+  extras)
+    run "$ROOT/scripts/extras.sh" "$@"
     ;;
   remove-app)
     run "$ROOT/scripts/remove-app.sh" "$@"

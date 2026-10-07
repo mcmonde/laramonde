@@ -12,10 +12,13 @@ DOMAIN=""
 FORCE=0
 SKIP_SCALE=0
 APP_PHP=""
+EXTRA_EXT=""
+EXTRA_APT=""
 
 usage() {
   cat <<'EOF'
-Usage: new-app.sh <app-name> [domain] [--octane] [--spa] [--php X.Y] [--force] [--skip-scale]
+Usage: new-app.sh <app-name> [domain] [--octane] [--spa] [--php X.Y]
+                  [--php-ext "a b"] [--apt "x y"] [--force] [--skip-scale]
 
 Before creating an app, detects host CPU/RAM and checks whether another app
 fits. On success, rescales infra + all apps' container limits.
@@ -23,6 +26,9 @@ fits. On success, rescales infra + all apps' container limits.
   --octane       Scaffold Octane/Swoole instead of PHP-FPM
   --spa          Path layout: / → frontend/dist, /api → Laravel, /app → Reverb
   --php X.Y      PHP version for this app (8.1–8.5; default: PHP_VERSION in .env)
+  --php-ext LIST Extra PHP extensions for this app only (e.g. "imagick soap")
+  --apt LIST     Extra Debian packages for this app only (e.g. "ghostscript")
+                 Run ./dock scan-app <repo> first to see what an app needs.
   --force        Create even if the resource check fails (not recommended)
   --skip-scale   Skip auto resource check/rescale
 
@@ -32,6 +38,7 @@ Examples:
   ./dock new-app api api.example.com --octane --spa
   ./dock new-app legacy legacy.example.com --php 8.3
   ./dock new-app billing bill.example.com --force
+  ./dock new-app docs docs.example.com --php-ext imagick --apt ghostscript
 EOF
 }
 
@@ -44,6 +51,14 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "--php needs a version, e.g. --php 8.3"; exit 1; }
       APP_PHP="$2"; shift 2 ;;
     --php=*) APP_PHP="${1#--php=}"; shift ;;
+    --php-ext)
+      [[ $# -ge 2 ]] || { echo "--php-ext needs a list, e.g. --php-ext imagick"; exit 1; }
+      EXTRA_EXT="$2"; shift 2 ;;
+    --php-ext=*) EXTRA_EXT="${1#--php-ext=}"; shift ;;
+    --apt)
+      [[ $# -ge 2 ]] || { echo "--apt needs a list, e.g. --apt ghostscript"; exit 1; }
+      EXTRA_APT="$2"; shift 2 ;;
+    --apt=*) EXTRA_APT="${1#--apt=}"; shift ;;
     --force|-f) FORCE=1; shift ;;
     --skip-scale) SKIP_SCALE=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -188,6 +203,10 @@ else
 fi
 chmod 600 "$SITE_DIR/defaults.env"
 
+if [[ -n "$EXTRA_EXT" || -n "$EXTRA_APT" ]]; then
+  "$ROOT/scripts/extras.sh" "$APP" --php-ext "$EXTRA_EXT" --apt "$EXTRA_APT" >/dev/null
+fi
+
 "$ROOT/scripts/render-site-nginx.sh" "$APP"
 
 if ! grep -q "path: sites/${APP}/compose.yml" "$COMPOSE"; then
@@ -235,6 +254,9 @@ EOF
 
 echo
 echo "Created app: $APP (runtime=${RUNTIME}, layout=${LAYOUT}, php=${APP_PHP})"
+if [[ -n "$EXTRA_EXT" || -n "$EXTRA_APT" ]]; then
+  echo "  extras      : php-ext=[$(env_get APP_PHP_EXTENSIONS "$SITE_DIR/defaults.env")] apt=[$(env_get APP_APT_PACKAGES "$SITE_DIR/defaults.env")] (own image tag)"
+fi
 echo "  site config : $SITE_DIR"
 echo "  nginx       : nginx/conf.d/sites/${APP}.conf"
 echo "  code dir    : $CODE_DIR"

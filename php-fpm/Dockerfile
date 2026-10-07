@@ -20,16 +20,7 @@ RUN install-php-extensions \
         pcntl \
         redis \
         exif \
-        imagick \
     && rm -rf /tmp/pear /var/cache/apt /var/lib/apt/lists/*
-
-# Ghostscript lets imagick rasterize PDFs (e.g. spatie/pdf-to-image); Debian's ImageMagick policy blocks PDF by default
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ghostscript \
-    && rm -rf /var/lib/apt/lists/* \
-    && for f in /etc/ImageMagick-*/policy.xml; do \
-         [ -f "$f" ] && sed -i -E 's#<policy domain="coder" rights="none" pattern="(PDF|PS|EPS)" />#<policy domain="coder" rights="read|write" pattern="\1" />#' "$f"; \
-       done; true
 
 # Runtime libs + fonts for wkhtmltopdf/wkhtmltoimage (e.g. h4cc/wkhtmltopdf-amd64 via laravel-snappy)
 RUN apt-get update \
@@ -55,6 +46,13 @@ RUN groupmod -o -g "${APP_GID}" www-data \
     && usermod -o -u "${APP_UID}" -g www-data www-data \
     && mkdir -p /var/www/html /var/www/apps \
     && chown -R www-data:www-data /var/www/html /var/www/apps
+
+# Per-app extras (sites/<app>/defaults.env, see ./dock extras). Keep this the last root step:
+# every layer above is shared with the plain image, so an app image only adds this layer.
+ARG APP_PHP_EXTENSIONS=""
+ARG APP_APT_PACKAGES=""
+COPY --chmod=755 install-extras.sh /usr/local/bin/install-extras
+RUN install-extras "$APP_PHP_EXTENSIONS" "$APP_APT_PACKAGES"
 
 WORKDIR /var/www/html
 
