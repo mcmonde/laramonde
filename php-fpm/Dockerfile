@@ -20,7 +20,16 @@ RUN install-php-extensions \
         pcntl \
         redis \
         exif \
+        imagick \
     && rm -rf /tmp/pear /var/cache/apt /var/lib/apt/lists/*
+
+# Ghostscript lets imagick rasterize PDFs (e.g. spatie/pdf-to-image); Debian's ImageMagick policy blocks PDF by default
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ghostscript \
+    && rm -rf /var/lib/apt/lists/* \
+    && for f in /etc/ImageMagick-*/policy.xml; do \
+         [ -f "$f" ] && sed -i -E 's#<policy domain="coder" rights="none" pattern="(PDF|PS|EPS)" />#<policy domain="coder" rights="read|write" pattern="\1" />#' "$f"; \
+       done; true
 
 # Runtime libs + fonts for wkhtmltopdf/wkhtmltoimage (e.g. h4cc/wkhtmltopdf-amd64 via laravel-snappy)
 RUN apt-get update \

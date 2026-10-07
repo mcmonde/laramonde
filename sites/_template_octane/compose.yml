@@ -89,6 +89,11 @@ services:
   __APP__-queue:
     <<: *app
     command: ${APP_QUEUE_COMMAND:-php artisan queue:work --sleep=3 --tries=3 --max-time=3600}
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q queue:work /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
@@ -98,6 +103,11 @@ services:
   __APP__-scheduler:
     <<: *app
     command: php artisan schedule:work
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q schedule:work /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
@@ -112,6 +122,11 @@ services:
       - backend
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 8080) ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
