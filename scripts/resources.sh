@@ -569,6 +569,7 @@ apply_app_limits() {
     else
       env_set PHP_CPUS 0 "$defaults"
       env_set PHP_MEMORY 0 "$defaults"
+      env_set PHP_MAX_CHILDREN "$(imax 8 "$(imin 32 "$((HOST_CPUS * 4))")")" "$defaults"
     fi
     env_set QUEUE_CPUS 0 "$defaults"
     env_set QUEUE_MEMORY 0 "$defaults"
@@ -589,6 +590,8 @@ apply_app_limits() {
     else
       env_set PHP_CPUS "$HTTP_CPU" "$defaults"
       env_set PHP_MEMORY "$(mb_to_compose "$HTTP_MB")" "$defaults"
+      # ~64 MB per FPM worker so a full pool stays inside the container's memory cap
+      env_set PHP_MAX_CHILDREN "$(imax 2 "$(imin 32 "$((HTTP_MB / 64))")")" "$defaults"
     fi
 
     env_set QUEUE_CPUS "$QUEUE_CPU" "$defaults"

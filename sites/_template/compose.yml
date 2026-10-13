@@ -18,6 +18,8 @@ x-app: &app
   volumes:
     - ${APP_CODE_PATH_HOST:-./apps}/__APP__:${APP_CODE_PATH_CONTAINER:-/var/www/apps}/__APP__
   environment:
+    PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+    PHP_MAX_CHILDREN: ${PHP_MAX_CHILDREN:-8}
     APP_NAME: ${APP_NAME:-__APP__}
     APP_URL: ${APP_URL:-http://__DOMAIN__}
     DB_CONNECTION: pgsql

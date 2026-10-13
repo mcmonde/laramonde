@@ -1,0 +1,13 @@
+---
+description: Never access the user's remote servers from this project
+alwaysApply: true
+---
+
+# Local project only — no remote server access
+
+Work in this project is about the multi-app (laramonde) stack code in this repository only.
+
+- Do not access any of the user's remote servers from this project: no `ssh`, `scp`, `rsync`, remote `docker`/`docker context`, or similar against hosts such as 167.71.217.2, 139.59.98.41, 128.199.198.19 or any other server.
+- If the user asks for something that would require remote access (deploying, checking a server, running commands on a host, copying files to/from a host), do NOT do it. First warn them that this project is meant to stay local-only, explain what the remote action would be, and stop so they can decide whether to continue. Only proceed if they explicitly confirm after the warning.
+- Do not bring server-specific state (deployed apps, server configs, credentials) into this project's context or files unless the user provides it.
+- `git push`/`git pull` to the project's own git remote is not "remote server access", but still only push when the user explicitly asks.

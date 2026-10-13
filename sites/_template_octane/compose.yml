@@ -18,6 +18,7 @@ x-app: &app
   volumes:
     - ${APP_CODE_PATH_HOST:-./apps}/__APP__:${APP_CODE_PATH_CONTAINER:-/var/www/apps}/__APP__
   environment:
+    PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
     APP_NAME: ${APP_NAME:-__APP__}
     APP_URL: ${APP_URL:-http://__DOMAIN__}
     APP_RUNTIME: octane

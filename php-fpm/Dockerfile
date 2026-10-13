@@ -38,6 +38,10 @@ RUN apt-get update \
         xfonts-base \
     && rm -rf /var/lib/apt/lists/*
 
+# Read by conf/php.ini and conf/www.conf; per-app values come from sites/<app>/defaults.env.
+ENV PHP_MEMORY_LIMIT=256M \
+    PHP_MAX_CHILDREN=8
+
 COPY conf/php.ini /usr/local/etc/php/conf.d/99-hardening.ini
 COPY conf/opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 COPY conf/www.conf /usr/local/etc/php-fpm.d/zz-www.conf

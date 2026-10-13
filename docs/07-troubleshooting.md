@@ -87,6 +87,17 @@ Queue, scheduler and Reverb containers inherit the PHP image's healthcheck, whic
       interval: 30s
 ```
 
+## Users logged out / queued jobs vanish / Redis `OOM command not allowed`
+
+All apps keep cache, sessions and queues in the one Redis, capped by `REDIS_MAXMEMORY`. The default policy `volatile-lru` evicts only keys with a TTL (cache entries, then idle sessions) and never queued jobs. If Redis fills with keys that have no TTL (queues, `Cache::forever`), writes fail with `OOM command not allowed` instead of losing data.
+
+```bash
+./dock exec redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli info memory | grep -E "used_memory_human|maxmemory_human|maxmemory_policy"'
+./dock exec redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli info stats | grep evicted_keys'
+```
+
+Fix: raise `REDIS_MAXMEMORY`/`REDIS_MEMORY` (or give Redis more via `./dock resources apply`), clear a backlog with the queue worker, or drop `Cache::forever` keys. Avoid `allkeys-lru`: it silently deletes queued jobs when memory is full. A policy change applies with `./dock up --force-recreate redis` (data persists via AOF).
+
 ## Permission denied inside an app
 
 - App containers run as UID/GID `1000` (`APP_UID`/`APP_GID`). Fix ownership on the host: `chown -R 1000:1000 apps/<app>/storage apps/<app>/bootstrap/cache`.

@@ -37,6 +37,9 @@ RUN apt-get update \
         libffi8 \
     && rm -rf /var/lib/apt/lists/*
 
+# Read by conf/php.ini; per-app value comes from sites/<app>/defaults.env.
+ENV PHP_MEMORY_LIMIT=512M
+
 COPY conf/php.ini /usr/local/etc/php/conf.d/99-hardening.ini
 COPY conf/opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 

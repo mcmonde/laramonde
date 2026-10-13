@@ -65,6 +65,7 @@ EOF
   cmd_row "  --php-ext \"a b\" --apt \"x y\"" "Per-app extensions/packages (own image tag)"
   cmd_row "scan-app <repo-url|path>" "Report what an app needs before new-app"
   cmd_row "extras <app> [opts]" "Show/set per-app --php-ext/--apt, --clear"
+  cmd_row "apps [app]" "List apps: runtime, PHP, domain, limits, workers"
   cmd_row "remove-app <name>" "Remove from stack (DB/code kept unless flags)"
   cmd_row "  --drop-db --remove-code --force" ""
   cmd_row "artisan <app> [args]" "Run artisan in <app>-php or <app>-octane"
@@ -159,6 +160,9 @@ case "$cmd" in
     ;;
   extras)
     run "$ROOT/scripts/extras.sh" "$@"
+    ;;
+  apps)
+    run "$ROOT/scripts/apps.sh" "$@"
     ;;
   remove-app)
     run "$ROOT/scripts/remove-app.sh" "$@"

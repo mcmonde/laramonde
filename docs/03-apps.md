@@ -44,6 +44,38 @@ If Postgres was initialised before the app existed and the database is missing: 
 
 Remove services an app does not need by deleting them from `sites/<app>/compose.yml` (see [older Laravel](#older-laravel-versions-810)).
 
+## Listing apps and their configuration
+
+```bash
+./dock apps            # one row per app
+./dock apps portal     # everything for one app
+```
+
+The list shows runtime, PHP version, layout, TLS, domain, the HTTP container's memory/CPU cap, worker count (FPM `pm.max_children` or Octane `--workers`), PHP `memory_limit`, and how many of the app's containers are running. The detail view adds the image tag, per-app extras, database, resource weight/pin, every container's memory/CPU limit and state, which file each value comes from (root `.env` beats `sites/<app>/defaults.env`), and — if the HTTP container is running — the `memory_limit` and `pm.max_children` PHP actually uses. Secrets are never printed.
+
+For the host-wide CPU/RAM budget behind those limits, use `./dock resources status`.
+
+## PHP memory limit and FPM workers
+
+Per app in `sites/<app>/defaults.env`:
+
+```env
+PHP_MEMORY_LIMIT=256M   # php.ini memory_limit (Octane default 512M)
+PHP_MAX_CHILDREN=8      # FPM pm.max_children (FPM apps only)
+```
+
+`./dock resources apply` sizes `PHP_MAX_CHILDREN` to the app's `PHP_MEMORY` cap (about 64 MB per worker, 2–32) unless the app is pinned (`./dock resources pin <app>`). Apply a change with `./dock up --force-recreate <app>-php <app>-queue <app>-scheduler` (the queue and scheduler use `memory_limit` too).
+
+Apps created before these settings existed show `*` in `./dock apps` and use the image defaults (256M/8 FPM, 512M Octane). To make them configurable, add to the `environment:` block of `sites/<app>/compose.yml`:
+
+```yaml
+  environment:
+    PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}   # 512M for Octane apps
+    PHP_MAX_CHILDREN: ${PHP_MAX_CHILDREN:-8}      # FPM apps only
+```
+
+then rebuild the image once (`./dock build <app>-php`) and recreate the containers.
+
 ## Per-app PHP versions
 
 Each app's PHP version lives in `sites/<app>/defaults.env`:

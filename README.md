@@ -206,6 +206,8 @@ Always starts from **this server's real CPU/RAM**.
 
 `rooms left` subtracts existing apps by **effective weight** (Octane ×1.25), not raw count.
 
+`apply` also sizes each FPM app's `PHP_MAX_CHILDREN` to its memory cap (~64 MB per worker). Per-app `PHP_MEMORY_LIMIT` / `PHP_MAX_CHILDREN` and `./dock apps` are described in [docs/03-apps.md](docs/03-apps.md#php-memory-limit-and-fpm-workers).
+
 | Level | When | Behavior |
 |-------|------|----------|
 | OK | &lt; 75% budget | continue |
@@ -304,6 +306,8 @@ Cron:
 ## Common commands
 
 ```bash
+./dock apps                      # all apps: runtime, PHP, domain, limits, workers
+./dock apps portal               # full config of one app
 ./dock artisan portal tinker
 ./dock composer portal install
 ./dock restart portal-queue portal-reverb portal-scheduler
