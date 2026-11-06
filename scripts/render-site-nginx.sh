@@ -65,8 +65,18 @@ set -a
 # shellcheck source=/dev/null
 source "$ROOT/.env"
 set +a
-REDIS_PASSWORD="${REDIS_PASSWORD:-}"
-MEILI_MASTER_KEY="${MEILI_MASTER_KEY:-}"
+# New apps set APP_REDIS_PASSWORD / APP_MEILI_KEY (possibly empty). Only a
+# site created before those keys existed still receives the shared secrets.
+if grep -qE '^APP_REDIS_PASSWORD=' "$DEFAULTS"; then
+  APP_REDIS_PASSWORD="$(env_get APP_REDIS_PASSWORD "$DEFAULTS")"
+else
+  APP_REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+fi
+if grep -qE '^APP_MEILI_KEY=' "$DEFAULTS"; then
+  APP_MEILI_KEY="$(env_get APP_MEILI_KEY "$DEFAULTS")"
+else
+  APP_MEILI_KEY="${MEILI_MASTER_KEY:-}"
+fi
 SCOUT_DRIVER="${SCOUT_DRIVER:-null}"
 MEILISEARCH_HOST="${MEILISEARCH_HOST:-}"
 MAIL_MAILER="${MAIL_MAILER:-log}"
@@ -102,6 +112,7 @@ else
   SRC="$ROOT/sites/_template/.env.laravel.example"
 fi
 cp "$SRC" "$LARAVEL_SNIPPET"
+chmod_private "$LARAVEL_SNIPPET"
 esc() { printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'; }
 sed -i \
   -e "s/__APP__/${APP}/g" \
@@ -110,8 +121,8 @@ sed -i \
   -e "s|http://__DOMAIN__|${SCHEME}://${DOMAIN}|g" \
   -e "s|APP_URL=http://|APP_URL=${SCHEME}://|g" \
   -e "s/__DB_PASSWORD__/$(esc "$DB_PASSWORD")/g" \
-  -e "s/__REDIS_PASSWORD__/$(esc "$REDIS_PASSWORD")/g" \
-  -e "s/__MEILI_MASTER_KEY__/$(esc "$MEILI_MASTER_KEY")/g" \
+  -e "s/__APP_REDIS_PASSWORD__/$(esc "$APP_REDIS_PASSWORD")/g" \
+  -e "s/__APP_MEILI_KEY__/$(esc "$APP_MEILI_KEY")/g" \
   -e "s/__SCOUT_DRIVER__/$(esc "$SCOUT_DRIVER")/g" \
   -e "s|__MEILISEARCH_HOST__|$(esc "$MEILISEARCH_HOST")|g" \
   -e "s/__MAIL_MAILER__/$(esc "$MAIL_MAILER")/g" \
@@ -142,6 +153,7 @@ awk -v url="$APP_URL_VALUE" \
   { print }
 ' "$LARAVEL_SNIPPET" > "${LARAVEL_SNIPPET}.tmp"
 mv "${LARAVEL_SNIPPET}.tmp" "$LARAVEL_SNIPPET"
+chmod_private "$LARAVEL_SNIPPET"
 
 # Ensure spa-related keys exist even if template lacked them
 if [[ "$LAYOUT" == "spa" ]]; then

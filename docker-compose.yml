@@ -32,6 +32,10 @@ include:
   - path: meilisearch/compose.yml
     project_directory: .
     env_file: meilisearch/defaults.env
+  # Host ports for Postgres/Redis/Meilisearch. Empty publish vars add none.
+  # scripts/sync-publish.sh rewrites this before compose runs.
+  - path: publish.yml
+    project_directory: .
   - path: mailpit/compose.yml
     project_directory: .
     env_file: mailpit/defaults.env

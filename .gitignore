@@ -28,6 +28,8 @@ nginx/conf.d/sites/*
 .resources.plan
 
 postgres/apps.list
+redis/acl/*
+!redis/acl/.gitkeep
 certs/
 certbot/www/
 certbot/conf/

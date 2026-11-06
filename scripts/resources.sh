@@ -480,6 +480,11 @@ apply_infra_to_env() {
   local unlimited=0
   if resource_mode_unlimited; then unlimited=1; fi
 
+  # Redis treats maxmemory 0 as "no limit", so volatile-lru never runs.
+  # Unlimited mode clears cgroup caps only; the Redis cap stays.
+  local redis_max
+  redis_max="$(imax 32 "$((INFRA_REDIS_MB * 2 / 3))")"
+
   if [[ "$unlimited" -eq 1 ]]; then
     # cpus/memory 0 → Compose clears deploy.resources.limits (no cgroup caps)
     env_set NGINX_CPUS 0 "$ENV_FILE"
@@ -488,7 +493,7 @@ apply_infra_to_env() {
     env_set POSTGRES_MEMORY 0 "$ENV_FILE"
     env_set REDIS_CPUS 0 "$ENV_FILE"
     env_set REDIS_MEMORY 0 "$ENV_FILE"
-    env_set REDIS_MAXMEMORY 0 "$ENV_FILE"
+    env_set REDIS_MAXMEMORY "${redis_max}mb" "$ENV_FILE"
     env_set MEILI_CPUS 0 "$ENV_FILE"
     env_set MEILI_MEMORY 0 "$ENV_FILE"
     env_set WORKSPACE_CPUS 0 "$ENV_FILE"
@@ -506,8 +511,6 @@ apply_infra_to_env() {
 
     env_set REDIS_CPUS "$INFRA_REDIS_CPU" "$ENV_FILE"
     env_set REDIS_MEMORY "$(mb_to_compose "$INFRA_REDIS_MB")" "$ENV_FILE"
-    local redis_max
-    redis_max="$(imax 32 "$((INFRA_REDIS_MB * 2 / 3))")"
     env_set REDIS_MAXMEMORY "${redis_max}mb" "$ENV_FILE"
 
     if [[ "$INFRA_MEILI_MB" -gt 0 ]]; then
@@ -546,6 +549,7 @@ apply_infra_to_env() {
   env_set HOST_CPUS_DETECTED "$HOST_CPUS" "$ENV_FILE"
   env_set HOST_MEM_MB_DETECTED "$HOST_MEM_MB" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
+  echo "Redis maxmemory cap: ${redis_max}mb"
 }
 
 apply_app_limits() {
@@ -861,7 +865,7 @@ Per-app knobs in sites/<app>/defaults.env:
 
 Root .env:
   RESOURCE_MODE=auto       # default — cgroup CPU/RAM caps from host plan
-  RESOURCE_MODE=unlimited  # no Docker limits; capacity hard-blocks become warnings
+  RESOURCE_MODE=unlimited  # no Docker cgroup limits; Redis maxmemory stays capped
 
 Always detects the real server first (not a fixed 2CPU/4GB profile).
 Optional presets remain: ./dock profile small|medium|large

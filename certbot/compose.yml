@@ -25,6 +25,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Renew runs as uid 0 with every capability dropped, so chown to nginx
+    # (uid 101) failed and tls-fix-certs used chmod a+r. These three let the
+    # renew loop hand the private key to group 101 at mode 640.
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
     logging:
       driver: json-file
       options:

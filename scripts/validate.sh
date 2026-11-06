@@ -19,6 +19,13 @@ if ! cmp -s php-fpm/install-extras.sh php-octane/install-extras.sh; then
 fi
 echo "  ok (identical)"
 
+echo "== redis acl boot =="
+sh -n redis/acl-boot.sh
+echo "  ok redis/acl-boot.sh"
+
+echo "== publish ports =="
+"$ROOT/scripts/sync-publish.sh"
+
 echo "== docker compose config =="
 if [[ ! -f .env ]]; then
   echo "No .env — copying .env.example for validation only"

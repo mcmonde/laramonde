@@ -100,18 +100,31 @@ if [[ "$DROP_DB" -eq 1 ]]; then
   if [[ -n "$line" ]]; then
     db="$(echo "$line" | awk '{print $2}')"
     user="$(echo "$line" | awk '{print $3}')"
+    if [[ ! "$db" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "$user" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "Refusing --drop-db: postgres/apps.list has an unsafe identifier for ${APP}." >&2
+      exit 1
+    fi
     if "${COMPOSE[@]}" ps postgres --status running --format '{{.Name}}' 2>/dev/null | grep -q .; then
       echo "Dropping Postgres database/role ${db}/${user}…"
       "${COMPOSE[@]}" exec -T postgres \
-        psql -U "${POSTGRES_USER:-postgres}" -v ON_ERROR_STOP=1 \
-        -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid();" \
-        -c "DROP DATABASE IF EXISTS \"${db}\";" \
-        -c "DROP ROLE IF EXISTS \"${user}\";" || true
+        psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+        --set=db="$db" --set=dbuser="$user" <<'SQL'
+SELECT format('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %L AND pid <> pg_backend_pid()', :'db')
+\gexec
+
+SELECT format('DROP DATABASE IF EXISTS %I', :'db')
+\gexec
+
+SELECT format('DROP ROLE IF EXISTS %I', :'dbuser')
+\gexec
+SQL
     else
       echo "Postgres is not running — skip --drop-db."
     fi
   fi
 fi
+
+"$ROOT/scripts/redis-acl.sh" del "app:${APP}" || true
 
 if [[ -f "$APPS_LIST" ]]; then
   awk -v app="$APP" '$1!=app { print }' "$APPS_LIST" > "${APPS_LIST}.tmp"

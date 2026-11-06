@@ -21,11 +21,10 @@ find /etc/letsencrypt/live /etc/letsencrypt/archive -type d -exec chmod 755 {} \
 find /etc/letsencrypt -name 'fullchain*.pem' -exec chmod 644 {} \;
 find /etc/letsencrypt -name 'cert*.pem' -exec chmod 644 {} \;
 find /etc/letsencrypt -name 'chain*.pem' -exec chmod 644 {} \;
-# Prefer root:${NGINX_UID} + 640 when the volume allows chown.
+# Private keys: root:nginx 640 when chown works. If the volume rejects chown,
+# leave them root:root 640. nginx is in group 0, so it can read that without
+# making the key world-readable. Do not chmod a+r.
+find /etc/letsencrypt -name 'privkey*.pem' -exec chmod 640 {} \;
 find /etc/letsencrypt -name 'privkey*.pem' -exec chown root:${NGINX_UID} {} \; 2>/dev/null || true
-find /etc/letsencrypt -name 'privkey*.pem' -exec chmod 640 {} \; 2>/dev/null || true
-# Always ensure world-readable fallback — otherwise nginx crash-loops and takes
-# every TLS site on this host down (seen with crmsbeta privkey after issue).
-find /etc/letsencrypt -name 'privkey*.pem' -exec chmod a+r {} \;
-echo 'Certificate permissions updated for nginx UID ${NGINX_UID}'
+echo 'Certificate permissions updated for nginx UID ${NGINX_UID} (keys mode 640, not world-readable)'
 "

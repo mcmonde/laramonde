@@ -251,8 +251,8 @@ Warning: under memory pressure the **kernel OOM killer** may stop Postgres/Redis
 |----------|---------|-----------|
 | nginx | Yes | Host-based routing |
 | Postgres | Yes | Database + role per app (TLS off inside Docker network; terminate TLS at nginx) |
-| Redis | Yes | `REDIS_PREFIX` + password |
-| Meilisearch | Optional (`search`) | `SCOUT_PREFIX` + master key |
+| Redis | Yes | ACL user `app:<name>`, keys limited to `<app>_*` |
+| Meilisearch | Optional (`search`) | API key per app, indexes `<app>_*` only |
 | PHP / Reverb / storage | Per app | Separate containers / bind mounts |
 
 ## Security (vs stock Laradock)

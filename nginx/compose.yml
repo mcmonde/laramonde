@@ -18,6 +18,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Cert private keys stay mode 640. chown to uid 101 often fails on the
+    # cert volume, leaving them root:root. Group 0 lets nginx read those
+    # keys without chmod a+r. App files mode 600 stay unreadable.
+    group_add:
+      - "0"
     read_only: true
     tmpfs:
       - /tmp:uid=101,gid=101,mode=1777

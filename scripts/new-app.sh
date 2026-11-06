@@ -175,6 +175,23 @@ fi
 DB_PASSWORD="$(rand_hex 32)"
 REVERB_KEY="$(rand_hex 16)"
 REVERB_SECRET="$(rand_hex 32)"
+APP_REDIS_PASSWORD="$(rand_hex 32)"
+
+if ! APP_REDIS_PASSWORD="$APP_REDIS_PASSWORD" "$ROOT/scripts/redis-acl.sh" add "app:${APP}" "${APP}_"; then
+  exit 1
+fi
+
+MEILI_KEY_FILE=""
+if profile_has search; then
+  MEILI_KEY_FILE="$(mktemp)"
+  chmod 600 "$MEILI_KEY_FILE"
+  if ! "$ROOT/scripts/meili-app-key.sh" --out "$MEILI_KEY_FILE" "$APP"; then
+    "$ROOT/scripts/redis-acl.sh" del "app:${APP}" || true
+    rm -f "$MEILI_KEY_FILE"
+    echo "Meilisearch did not issue a per-app key. The app was not created." >&2
+    exit 1
+  fi
+fi
 
 mkdir -p "$SITE_DIR" "$CODE_DIR" "$ROOT/nginx/conf.d/sites"
 
@@ -189,6 +206,15 @@ sed -i \
   "$SITE_DIR/defaults.env"
 
 env_set DB_PASSWORD "$DB_PASSWORD" "$SITE_DIR/defaults.env"
+env_set APP_REDIS_PASSWORD "$APP_REDIS_PASSWORD" "$SITE_DIR/defaults.env"
+env_set REDIS_USERNAME "app:${APP}" "$SITE_DIR/defaults.env"
+if [[ -n "$MEILI_KEY_FILE" ]]; then
+  env_set APP_MEILI_KEY "$(<"$MEILI_KEY_FILE")" "$SITE_DIR/defaults.env"
+  rm -f "$MEILI_KEY_FILE"
+  MEILI_KEY_FILE=""
+else
+  env_set APP_MEILI_KEY "" "$SITE_DIR/defaults.env"
+fi
 env_set REVERB_APP_KEY "$REVERB_KEY" "$SITE_DIR/defaults.env"
 env_set REVERB_APP_SECRET "$REVERB_SECRET" "$SITE_DIR/defaults.env"
 env_set APP_TLS 0 "$SITE_DIR/defaults.env"
@@ -235,7 +261,10 @@ fi
 
 if docker compose -f "$COMPOSE" --project-directory "$ROOT" ps postgres --status running --format '{{.Name}}' 2>/dev/null | grep -q .; then
   echo "Postgres is running — creating database now..."
-  "$ROOT/scripts/create-app-db.sh" "$DBIDENT" "$DBIDENT" "$DB_PASSWORD" || true
+  if ! "$ROOT/scripts/create-app-db.sh" "$DBIDENT" "$DBIDENT" "$DB_PASSWORD"; then
+    echo "Database create failed for ${DBIDENT}. The app files were written; Postgres was not updated." >&2
+    exit 1
+  fi
 fi
 
 # ---- rescale all apps now that the new one exists --------------------------

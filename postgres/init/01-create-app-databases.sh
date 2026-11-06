@@ -47,6 +47,9 @@ SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'dbuser', :'dbpass')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'dbuser')
 \gexec
 
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'dbuser', :'dbpass')
+\gexec
+
 SELECT format('CREATE DATABASE %I OWNER %I', :'db', :'dbuser')
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db')
 \gexec

@@ -52,23 +52,35 @@ env_get() {
   { grep -E "^${key}=" "$file" 2>/dev/null || true; } | head -n1 | cut -d= -f2-
 }
 
+# Rewrites via temp+mv follow the process umask (often 664). Stack env files
+# hold passwords, so every rewrite ends at mode 600.
+chmod_private() {
+  local file="$1"
+  [[ -n "$file" && -f "$file" ]] || return 0
+  chmod 600 "$file" 2>/dev/null || true
+}
+
 # Replace or append KEY=value. Safe when values contain '=' (unlike FS="=" awk).
 env_set() {
   local key="$1" value="$2" file="$3"
   if [[ ! -f "$file" ]]; then
-    printf '%s=%s\n' "$key" "$value" > "$file"
+    (umask 077; printf '%s=%s\n' "$key" "$value" > "$file")
+    chmod_private "$file"
     return
   fi
   if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    local tmp
+    tmp="$(mktemp "${file}.tmp.XXXXXX")"
     awk -v k="$key" -v v="$value" '
       BEGIN { prefix = k "=" }
       index($0, prefix) == 1 { print prefix v; next }
       { print }
-    ' "$file" > "${file}.tmp"
-    mv "${file}.tmp" "$file"
+    ' "$file" > "$tmp"
+    mv "$tmp" "$file"
   else
     printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
+  chmod_private "$file"
 }
 
 # Remove KEY=... lines from an env file (no-op if missing).
@@ -76,13 +88,16 @@ env_unset() {
   local key="$1" file="$2"
   [[ -f "$file" ]] || return 0
   if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    local tmp
+    tmp="$(mktemp "${file}.tmp.XXXXXX")"
     awk -v k="$key" '
       BEGIN { prefix = k "=" }
       index($0, prefix) == 1 { next }
       { print }
-    ' "$file" > "${file}.tmp"
-    mv "${file}.tmp" "$file"
+    ' "$file" > "$tmp"
+    mv "$tmp" "$file"
   fi
+  chmod_private "$file"
 }
 
 # ---- profiles / optional services --------------------------------------------

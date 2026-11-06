@@ -2,18 +2,20 @@ services:
   redis:
     image: ${REDIS_IMAGE:-redis:8-alpine}
     restart: unless-stopped
+    # Root only long enough for acl-boot.sh to build the ACL file and drop
+    # privileges through the image entrypoint. The default user keeps
+    # REDIS_PASSWORD; per-app users come from redis/acl/apps.acl.
+    user: "0:0"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD — run ./dock setup}
+    entrypoint: ["/bin/sh", "/usr/local/bin/redis-acl-boot.sh"]
     command:
-      - redis-server
       - --appendonly
       - "yes"
       - --maxmemory
       - ${REDIS_MAXMEMORY:-2gb}
       - --maxmemory-policy
       - ${REDIS_MAXMEMORY_POLICY:-volatile-lru}
-      - --requirepass
-      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD — run ./dock setup}
       - --rename-command
       - FLUSHALL
       - ""
@@ -27,6 +29,8 @@ services:
       - "yes"
     volumes:
       - redis_data:/data
+      - ./redis/acl-boot.sh:/usr/local/bin/redis-acl-boot.sh:ro
+      - ./redis/acl:/acl:ro
     networks:
       - backend
     security_opt:

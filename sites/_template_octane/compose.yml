@@ -32,16 +32,18 @@ x-app: &app
     REDIS_CLIENT: phpredis
     REDIS_HOST: redis
     REDIS_PORT: "6379"
-    REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD — run ./dock setup}
-    REDIS_PREFIX: ${REDIS_PREFIX:-__APP___}
+    # Per-app ACL user. Not the shared REDIS_PASSWORD (that stays on the default user).
+    REDIS_USERNAME: "app:__APP__"
+    REDIS_PASSWORD: ${APP_REDIS_PASSWORD:?Set APP_REDIS_PASSWORD in sites/__APP__/defaults.env}
+    REDIS_PREFIX: "__APP___"
     CACHE_STORE: redis
     SESSION_DRIVER: redis
     QUEUE_CONNECTION: redis
     # Scout/Mail follow COMPOSE_PROFILES (synced by ./dock setup|resources apply)
     SCOUT_DRIVER: ${SCOUT_DRIVER:-null}
-    SCOUT_PREFIX: ${SCOUT_PREFIX:-__APP___}
+    SCOUT_PREFIX: "__APP___"
     MEILISEARCH_HOST: ${MEILISEARCH_HOST:-}
-    MEILISEARCH_KEY: ${MEILI_MASTER_KEY:-}
+    MEILISEARCH_KEY: ${APP_MEILI_KEY:-}
     MAIL_MAILER: ${MAIL_MAILER:-log}
     MAIL_HOST: ${MAIL_HOST:-}
     MAIL_PORT: ${MAIL_PORT:-2525}
@@ -49,9 +51,10 @@ x-app: &app
     REVERB_APP_ID: ${REVERB_APP_ID:-__APP__}
     REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY}
     REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET}
-    REVERB_HOST: 0.0.0.0
-    REVERB_PORT: "8080"
-    REVERB_SCHEME: http
+    # Bind address. REVERB_HOST / REVERB_PORT / REVERB_SCHEME stay the public
+    # values from the app .env (Laravel prefers real env vars over that file).
+    REVERB_SERVER_HOST: 0.0.0.0
+    REVERB_SERVER_PORT: "8080"
   networks:
     - backend
   depends_on:

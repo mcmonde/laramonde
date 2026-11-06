@@ -106,6 +106,10 @@ EOF
 cmd="${1:-list}"
 shift || true
 
+if [[ "$cmd" != "help" && "$cmd" != "-h" && "$cmd" != "--help" && "$cmd" != "list" ]]; then
+  "$ROOT/scripts/sync-publish.sh"
+fi
+
 case "$cmd" in
   help|-h|--help|list)
     usage

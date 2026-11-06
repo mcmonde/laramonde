@@ -87,6 +87,8 @@ echo "Detecting host and applying resource limits…"
 "$ROOT/scripts/resources.sh" assess || true
 "$ROOT/scripts/resources.sh" apply || true
 
+"$ROOT/scripts/sync-publish.sh"
+
 echo
 echo "Setup complete. Next:"
 echo "  ./dock up"

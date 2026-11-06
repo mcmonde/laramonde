@@ -24,7 +24,7 @@ Every app container receives:
 |----------|-------|
 | `SCOUT_DRIVER` | `meilisearch` (or `null`) |
 | `MEILISEARCH_HOST` | `http://meilisearch:7700` |
-| `MEILISEARCH_KEY` | the master key (see per-app keys below) |
+| `MEILISEARCH_KEY` | per-app key from `./dock new-app` (empty if `search` is off) |
 | `SCOUT_PREFIX` | `<app>_` |
 
 ## Add Scout to an app
@@ -83,25 +83,11 @@ From then on Scout updates the index when models are saved. To index through the
 
 Commit `composer.lock`: if `meilisearch/meilisearch-php` is only in `composer.json`, servers without the package fail with *"Please install the suggested Meilisearch client"*.
 
-## Per-app API keys (recommended in production)
+## Per-app API keys
 
-By default each app gets the master key, so one app could read or delete another app's indexes. Give each app a key limited to its prefix:
+`./dock new-app` creates a key limited to indexes `<app>_*` and stores it as `APP_MEILI_KEY` in `sites/<app>/defaults.env`. Compose injects that value as `MEILISEARCH_KEY`. App containers do not receive `MEILI_MASTER_KEY`.
 
-```bash
-MASTER=$(grep ^MEILI_MASTER_KEY= .env | cut -d= -f2-)
-docker compose exec -T meilisearch wget -qO- \
-  --header="Authorization: Bearer $MASTER" --header="Content-Type: application/json" \
-  --post-data='{"name":"crm","actions":["search","documents.*","indexes.*","settings.*","tasks.get"],"indexes":["crm_*"],"expiresAt":null}' \
-  http://127.0.0.1:7700/keys
-```
-
-Copy `key` from the response, then:
-
-1. `sites/crm/defaults.env`: `MEILISEARCH_KEY=<key>`
-2. `sites/crm/compose.yml`: change `MEILISEARCH_KEY: ${MEILI_MASTER_KEY:-}` to `MEILISEARCH_KEY: ${MEILISEARCH_KEY:-${MEILI_MASTER_KEY:-}}`
-3. `./dock up --force-recreate crm-octane crm-queue crm-scheduler`
-
-List or revoke keys with `GET /keys` and `DELETE /keys/<uid>` using the master key.
+The master key stays on the Meilisearch service (and the dev workspace shell). List or revoke keys with `GET /keys` and `DELETE /keys/<uid>` inside that container, using its own `MEILI_MASTER_KEY`. The response includes key secrets, so don't log it.
 
 ## Admin UI
 
