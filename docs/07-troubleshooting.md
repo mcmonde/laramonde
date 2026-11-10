@@ -106,7 +106,18 @@ Fix: raise `REDIS_MAXMEMORY`/`REDIS_MEMORY` (or give Redis more via `./dock reso
 
 ## `./dock new-app` aborts with "Non-interactive session: treating as NO"
 
-The capacity check needs confirmation. After reviewing `./dock resources`, run `RESOURCES_ASSUME_YES=1 ./dock new-app …` (or `--force`).
+The capacity check needs confirmation. After reviewing `./dock resources`, run `RESOURCES_ASSUME_YES=1 ./dock new-app …` (or `--force`). `./dock install --no-interaction` sets `DOCK_NO_INTERACTION=1` for that same prompt, so a script answers no and exits instead of waiting. Pass `RESOURCES_ASSUME_YES=1` when the host has been checked.
+
+## `./dock install` is waiting, or it exits before asking
+
+It asks only when no `sites/<app>/compose.yml` include exists (template directories are ignored). With no terminal, pass the answers:
+
+```bash
+./dock install --no-interaction --env development --name portal --laravel
+./dock install --no-interaction --env production --name crm
+```
+
+`./dock install --dry-run` prints the questions, or the `.env` plan when those flags are present, and does not write files or start containers. After an app is registered, install skips the questions.
 
 ## Generated URLs contain `/api/api/…`
 

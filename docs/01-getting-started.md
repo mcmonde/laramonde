@@ -9,15 +9,36 @@ Run the stack on your workstation and serve a Laravel app at `http://<name>.loca
 - On the host: `openssl` (`./dock setup` secrets) and `sha256sum` (every `./dock new-app` Redis ACL). macOS needs GNU `sha256sum` on `PATH`. `python3` is required for `./dock scan-app` and for `./dock new-app` while the `search` profile is on. `curl` is how setup detects a public IPv4 for the backup prefix; setup continues when detection fails.
 - About 4 GB of free RAM for the stack plus one or two apps.
 
-## 1. Clone and configure the stack
+## 1. Clone and first install
 
 ```bash
 git clone git@github.com:mcmonde/laramonde.git multi-app
 cd multi-app
-./dock setup
+./dock                  # command list
+./dock install
 ```
 
-`./dock setup`:
+`./dock install` runs when `docker-compose.yml` includes no `sites/<app>/compose.yml`. Template directories (`sites/_template`, `sites/_template_octane`) are ignored. Once an app is included, a later `./dock install` skips the questions and leaves `.env` alone.
+
+It asks:
+
+1. **development or production.** Development writes the `.env.example` host values: `COMPOSE_PROFILES=dev,search`, `NGINX_BIND=127.0.0.1`, `CERTBOT_STAGING=1`, `MEILI_ENV=development`, `RESOURCE_MODE=auto`. Production writes the values in [Production server](02-production.md): `COMPOSE_PROFILES=tls`, `NGINX_BIND=0.0.0.0`, `CERTBOT_STAGING=0`, `MEILI_ENV=production`, `RESOURCE_MODE=unlimited`.
+2. **Project name.** That name is the first app. It follows the `./dock new-app` rules: a lowercase letter, then lowercase letters, digits, or hyphens. The domain defaults to `<name>.local`.
+3. **Development only:** install the latest Laravel into `apps/<name>`, or clone a git repository you give. In production, `apps/<name>` stays empty for the deploy.
+
+It then runs `./dock setup`, starts the stack, and registers the app (Postgres database and nginx vhost). `./dock setup` and `./dock new-app` remain the commands for a later app, a secret rotation, or a first app that needs its own domain, `--octane`, or `--php`.
+
+Preview the questions without answering them, or pass the answers in a script:
+
+```bash
+./dock install --dry-run
+./dock install --dry-run --no-interaction --env development --name portal --laravel
+./dock install --no-interaction --env development --name portal --laravel
+./dock install --no-interaction --env development --name portal --git git@github.com:org/portal.git
+./dock install --no-interaction --env production --name crm
+```
+
+`./dock setup` (which install calls):
 
 - creates `.env` from `.env.example` when `.env` is absent (mode `600`, gitignored). An existing `.env` is kept, and only weak secrets are replaced,
 - replaces a weak Postgres or Redis password with a **96-char hex** value, and a weak Meilisearch master key with a **64-char hex** value,
@@ -26,16 +47,19 @@ cd multi-app
 - sets `BACKUP_S3_PREFIX=database-backups/<ipv4>` when the prefix is empty and a public IPv4 can be detected,
 - detects CPU/RAM and runs resource apply to write container limits. Setup still finishes when that apply fails; run `./dock resources apply` again after reading the message.
 
-The local default is `COMPOSE_PROFILES=dev,search`, which adds the **workspace** container, **Mailpit** (catches outgoing mail) and **Meilisearch**.
+Development (`COMPOSE_PROFILES=dev,search`) adds the **workspace** container, **Mailpit** (catches outgoing mail) and **Meilisearch**. The Laravel install runs inside the workspace container.
 
-Start the shared services:
+To pick the domain and flags yourself:
 
 ```bash
+./dock setup
 ./dock up
-./dock ps
+./dock new-app portal portal.local
 ```
 
 ## 2. Add an app
+
+`./dock install` already registered the first app. Add another, or create the first one by hand:
 
 ```bash
 ./dock scan-app ../portal          # optional: what PHP version, extensions and flags it needs
@@ -64,6 +88,8 @@ This creates:
 It also registers the app in `docker-compose.yml` and `postgres/apps.list`, writes Redis ACL user `app:portal` (keys `portal_*`) to `redis/acl/apps.acl`, and creates the `portal` database and role when Postgres is already running. With `search` in `COMPOSE_PROFILES` (the local default), it asks Meilisearch for a key limited to `portal_*` indexes and exits before writing the app when that request fails. Meilisearch is started for the key request if it is not already up.
 
 ## 3. Put the code in place
+
+When `./dock install` installed the latest Laravel, or cloned the git URL you gave, the code is already in `apps/<name>`. The copy below is for production and for an app created with `./dock new-app`.
 
 `apps/portal/` already contains a `.gitkeep`, so clone elsewhere and copy in:
 
@@ -97,6 +123,8 @@ Open <http://portal.local>. Mail sent by the app shows up in Mailpit at <http://
 ## Everyday commands
 
 ```bash
+./dock                                   # command list
+./dock help new-app
 ./dock artisan portal tinker            # artisan in the app's PHP container
 ./dock composer portal require foo/bar  # composer in the app's PHP container
 ./dock workspace                        # shell with php, composer, node, git (dev profile)

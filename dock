@@ -3,7 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml")
+# shellcheck source=scripts/_lib.sh
+source "$ROOT/scripts/_lib.sh"
 
 run() {
   echo "+ $*"
@@ -25,9 +26,218 @@ app_http_service() {
   fi
 }
 
-# Artisan-style command list (aligned columns, grouped sections).
-cmd_row() {
-  printf "  %-28s %s\n" "$1" "$2"
+# name, signature, description, section, kind (alias or empty). Tabs separate fields.
+command_catalog() {
+  printf '%s\n' \
+    $'help\thelp [command]\tDisplay help for a command\troot\t' \
+    $'list\tlist\tList commands\troot\t' \
+    $'install\tinstall [options]\tFirst install when no apps are registered\troot\t' \
+    $'setup\tsetup [--rotate-secrets]\tCreate .env and generate secrets\troot\t' \
+    $'validate\tvalidate\tCompose config and bash -n on scripts\troot\t' \
+    $'up\tup [services...]\tStart the stack in the background\tstack\t' \
+    $'down\tdown [options]\tStop the stack\tstack\t' \
+    $'ps\tps [options]\tList containers\tstack\t' \
+    $'logs\tlogs [services...]\tFollow logs\tstack\t' \
+    $'restart\trestart [services...]\tRestart services\tstack\t' \
+    $'build\tbuild [services...]\tBuild images\tstack\t' \
+    $'config\tconfig\tRender the compose config\tstack\t' \
+    $'exec\texec <service> [cmd...]\tRun a command in a service container\tstack\t' \
+    $'new-app\tnew-app <name> [host]\tScaffold an app, database, and nginx vhost\tapp\t' \
+    $'scan-app\tscan-app <repo-url|path>\tReport what an app needs before new-app\tapp\t' \
+    $'extras\textras <app> [options]\tShow or set per-app PHP extensions and packages\tapp\t' \
+    $'apps\tapps [app]\tList apps, or one app, without secrets\tapp\t' \
+    $'remove-app\tremove-app <name>\tRemove an app from the stack\tapp\t' \
+    $'artisan\tartisan <app> [args...]\tRun php artisan in the app container\tapp\t' \
+    $'composer\tcomposer <app> [args...]\tRun composer in the app container\tapp\t' \
+    $'workspace\tworkspace\tShell in the workspace container\tapp\t' \
+    $'site:render\tsite:render <app>\tRe-render the nginx vhost for an app\tapp\t' \
+    $'db:create\tdb:create <name>\tCreate the app database on a running Postgres\tdatabase\t' \
+    $'backup\tbackup [db]\tDump app databases\tdatabase\t' \
+    $'resources\tresources [sub]\tAssess or apply host CPU and RAM limits\tresources\t' \
+    $'profile\tprofile <small|medium|large>\tApply a fixed CPU and RAM preset\tresources\t' \
+    $'scale\tscale [sub]\tAlias of resources\tresources\talias' \
+    $'tls:issue\ttls:issue <app>\tIssue a certificate and switch the vhost to HTTPS\ttls\t' \
+    $'tls:disable\ttls:disable <app>\tSwitch an app back to HTTP-only nginx\ttls\t' \
+    $'tls:renew\ttls:renew\tRenew certificates and reload nginx\ttls\t' \
+    $'tls:certs\ttls:certs\tList certificates and days remaining\ttls\t' \
+    $'tls:status\ttls:status [app]\tShow TLS status\ttls\t'
+}
+
+catalog_field() {
+  local want="$1" field="$2"
+  local name sig desc section kind
+  while IFS=$'\t' read -r name sig desc section kind; do
+    [[ -z "${name:-}" ]] && continue
+    [[ "$name" == "$want" ]] || continue
+    case "$field" in
+      sig) printf '%s\n' "$sig" ;;
+      desc) printf '%s\n' "$desc" ;;
+      section) printf '%s\n' "$section" ;;
+      kind) printf '%s\n' "$kind" ;;
+      *) return 1 ;;
+    esac
+    return 0
+  done < <(command_catalog)
+  return 1
+}
+
+print_command_list() {
+  local name sig desc section kind current=""
+  while IFS=$'\t' read -r name sig desc section kind; do
+    [[ -z "${name:-}" ]] && continue
+    [[ "${kind:-}" == "alias" ]] && continue
+    if [[ "$section" != "$current" ]]; then
+      current="$section"
+      if [[ "$section" != "root" ]]; then
+        echo
+        echo " ${section}"
+      fi
+    fi
+    printf '  %-34s %s\n' "$sig" "$desc"
+  done < <(command_catalog)
+}
+
+command_extra() {
+  case "$1" in
+    install)
+      cat <<'EOF'
+
+Options:
+  --env development|production   Host mode (dev and prod are accepted)
+  --name <app>                   First app name
+  --laravel                      Development: latest Laravel into apps/<name>
+  --git <url>                    Development: clone that repository into apps/<name>
+  --no-interaction, -n           Do not ask; require the flags above
+  --dry-run                      Print the questions or the plan; write nothing
+
+Development writes COMPOSE_PROFILES=dev,search, NGINX_BIND=127.0.0.1,
+CERTBOT_STAGING=1, MEILI_ENV=development, RESOURCE_MODE=auto.
+Production writes COMPOSE_PROFILES=tls, NGINX_BIND=0.0.0.0,
+CERTBOT_STAGING=0, MEILI_ENV=production, RESOURCE_MODE=unlimited.
+Production skips the Laravel/git question. RESOURCE_MODE=unlimited is the
+small-host default; on a larger host set RESOURCE_MODE=auto afterwards.
+
+Asks only when no sites/<app>/compose.yml include exists. Template names
+that start with _ are ignored. A later run with an app included does not ask.
+
+Preview the questions without answering:
+  ./dock install --dry-run
+
+DOCK_INSTALL_COMPOSE_FILE  Read includes from this file (fixture).
+EOF
+      ;;
+    setup)
+      cat <<'EOF'
+
+Options:
+  --rotate-secrets    Force-regenerate Postgres, Redis, and Meilisearch secrets
+EOF
+      ;;
+    up|down|ps|restart|build|config|exec)
+      cat <<'EOF'
+
+Extra arguments are passed to docker compose.
+EOF
+      ;;
+    logs)
+      cat <<'EOF'
+
+Follows logs (docker compose logs -f). Extra arguments are passed through.
+EOF
+      ;;
+    new-app)
+      cat <<'EOF'
+
+Options:
+  --octane             Scaffold Octane/Swoole instead of PHP-FPM
+  --spa                / → SPA, /api → Laravel, /app → Reverb
+  --php X.Y            Per-app PHP 8.1–8.5 (default: PHP_VERSION in .env)
+  --php-ext "a b"      Per-app PHP extensions (own image tag)
+  --apt "x y"          Per-app Debian packages
+  --force              Create even if the resource check fails
+  --skip-scale         Skip the capacity check and rescale
+
+Non-interactive capacity prompt: --force, or RESOURCES_ASSUME_YES=1.
+EOF
+      ;;
+    scan-app)
+      cat <<'EOF'
+
+Options:
+  --branch NAME    Branch to scan (git URLs)
+  --php X.Y        Check against this PHP version
+  --no-docker      Static scan only
+EOF
+      ;;
+    extras)
+      cat <<'EOF'
+
+Options:
+  --php-ext "a b"    PHP extensions for this app
+  --apt "x y"        Debian packages for this app
+  --clear            Remove extras and return to the shared image
+
+With no options, show the current extras.
+EOF
+      ;;
+    remove-app)
+      cat <<'EOF'
+
+Options:
+  --drop-db        Drop the Postgres database and role
+  --remove-code    Delete apps/<name>/
+  --force          Skip the confirmation prompt
+
+The database and the Laravel code are kept unless those flags are set.
+Non-interactive confirmation: --force, or RESOURCES_ASSUME_YES=1.
+EOF
+      ;;
+    resources|scale)
+      cat <<'EOF'
+
+Subcommands:
+  assess                 Show host CPU/RAM capacity (default)
+  apply                  Write scaled limits (or clear them if unlimited)
+  status                 Show the current per-app resource plan
+  weight <app> <n>       Set a share weight, then rescale
+  pin <app>              Freeze an app's limits
+  unpin <app>            Allow auto-scale again and rescale
+
+RESOURCE_MODE=auto|unlimited in .env. Soft prompts honor
+RESOURCES_ASSUME_YES=1 and DOCK_NO_INTERACTION=1.
+EOF
+      ;;
+    profile)
+      cat <<'EOF'
+
+Sets RESOURCE_MODE=auto, then merges profiles/<name>.env into .env.
+EOF
+      ;;
+    backup)
+      cat <<'EOF'
+
+With no database name, dump every app database plus globals.
+Spaces upload follows BACKUP_* in .env.
+EOF
+      ;;
+    tls:issue)
+      cat <<'EOF'
+
+Options:
+  --staging    Use the Let's Encrypt staging endpoint
+  --force      Continue when a certificate already exists
+
+CERTBOT_STAGING=1 in .env also selects staging.
+EOF
+      ;;
+    db:create)
+      cat <<'EOF'
+
+Reads the database, role, and password from postgres/apps.list.
+The password is not printed.
+EOF
+      ;;
+  esac
 }
 
 usage() {
@@ -38,82 +248,157 @@ Usage:
   ./dock <command> [options] [arguments]
 
 Options:
-  -h, --help                 Display this command list
-  list                       Same as --help
+  -h, --help                 Display help for a command, or this list
+  help [command]             Help for one command
+  list                       List commands
 
 Available commands:
 EOF
-  cmd_row "help" "Display this command list"
-  cmd_row "list" "Display this command list"
-  cmd_row "setup" "Create .env and generate secrets"
-  cmd_row "validate" "Compose config + bash -n on scripts"
-  echo
-  echo " stack"
-  cmd_row "up [services...]" "Start stack (default: all enabled services)"
-  cmd_row "down" "Stop stack"
-  cmd_row "ps" "List containers"
-  cmd_row "logs [service]" "Follow logs"
-  cmd_row "restart [services...]" "Restart services"
-  cmd_row "build [services...]" "Build images"
-  cmd_row "config" "Render compose config (validate)"
-  cmd_row "exec <service> [cmd]" "docker compose exec"
-  echo
-  echo " app"
-  cmd_row "new-app <name> [host]" "Scaffold app (RAM/CPU check, then rescale)"
-  cmd_row "  --octane --spa --force" "--spa: / → SPA, /api → Laravel, /app → Reverb"
-  cmd_row "  --php X.Y" "Per-app PHP 8.1–8.5 (default: PHP_VERSION in .env)"
-  cmd_row "  --php-ext \"a b\" --apt \"x y\"" "Per-app extensions/packages (own image tag)"
-  cmd_row "scan-app <repo-url|path>" "Report what an app needs before new-app"
-  cmd_row "extras <app> [opts]" "Show/set per-app --php-ext/--apt, --clear"
-  cmd_row "apps [app]" "List apps: runtime, PHP, domain, limits, workers"
-  cmd_row "remove-app <name>" "Remove from stack (DB/code kept unless flags)"
-  cmd_row "  --drop-db --remove-code --force" ""
-  cmd_row "artisan <app> [args]" "Run artisan in <app>-php or <app>-octane"
-  cmd_row "composer <app> [args]" "Run composer in that app's HTTP container"
-  cmd_row "workspace" "Shell into the workspace container"
-  cmd_row "site:render <app>" "Re-render nginx site from sites/<app>/defaults.env"
-  echo
-  echo " database"
-  cmd_row "db:create <name>" "Create app Postgres db/user on a running instance"
-  cmd_row "backup [db]" "Per-DB Postgres dump (+ optional private Spaces upload)"
-  echo
-  echo " resources"
-  cmd_row "resources" "Assess host CPU/RAM capacity (default)"
-  cmd_row "resources assess" "Same as resources"
-  cmd_row "resources apply" "Write scaled limits (or clear them if unlimited)"
-  cmd_row "resources status" "Show current per-app resource plan"
-  cmd_row "resources weight <app> <n>" "Set share weight, then rescale"
-  cmd_row "resources pin <app>" "Freeze an app's limits from auto-scale"
-  cmd_row "resources unpin <app>" "Allow auto-scale again and rescale"
-  cmd_row "profile <small|medium|large>" "Apply fixed CPU/RAM preset (sets MODE=auto)"
-  echo "     RESOURCE_MODE=auto|unlimited in .env"
-  echo
-  echo " tls"
-  cmd_row "tls:issue <app>" "Let's Encrypt cert + HTTPS nginx"
-  cmd_row "  --staging --force" ""
-  cmd_row "tls:disable <app>" "Switch app back to HTTP-only nginx"
-  cmd_row "tls:renew" "Renew all certs, fix perms, reload nginx"
-  cmd_row "tls:certs" "List Let's Encrypt certs + days remaining"
-  cmd_row "tls:status [app]" "Show TLS status"
-  echo
+  print_command_list
   cat <<'EOF'
-Unknown commands are passed through to docker compose:
-  ./dock logs -f nginx
-  ./dock pull
+
+For up, down, ps, logs, restart, build, config, and exec, extra arguments
+are passed to docker compose.
 EOF
+  if [[ -z "$(registered_app_names)" ]]; then
+    cat <<'EOF'
+
+No apps yet. First install: ./dock install
+Preview the questions: ./dock install --dry-run
+EOF
+  fi
 }
 
-cmd="${1:-list}"
-shift || true
+edit_distance() {
+  local a="$1" b="$2"
+  local i j alen blen cost del ins sub m
+  alen=${#a}
+  blen=${#b}
+  if [[ "$alen" -eq 0 ]]; then
+    echo "$blen"
+    return 0
+  fi
+  if [[ "$blen" -eq 0 ]]; then
+    echo "$alen"
+    return 0
+  fi
+  local -a prev curr
+  for ((j = 0; j <= blen; j++)); do
+    prev[j]=$j
+  done
+  for ((i = 1; i <= alen; i++)); do
+    curr[0]=$i
+    for ((j = 1; j <= blen; j++)); do
+      cost=1
+      if [[ "${a:i-1:1}" == "${b:j-1:1}" ]]; then
+        cost=0
+      fi
+      del=$((curr[j - 1] + 1))
+      ins=$((prev[j] + 1))
+      sub=$((prev[j - 1] + cost))
+      m=$del
+      if [[ "$ins" -lt "$m" ]]; then
+        m=$ins
+      fi
+      if [[ "$sub" -lt "$m" ]]; then
+        m=$sub
+      fi
+      curr[j]=$m
+    done
+    for ((j = 0; j <= blen; j++)); do
+      prev[j]=${curr[j]}
+    done
+  done
+  echo "${prev[blen]}"
+}
 
-if [[ "$cmd" != "help" && "$cmd" != "-h" && "$cmd" != "--help" && "$cmd" != "list" ]]; then
+suggest_commands() {
+  local input="$1" name sig desc section kind dist
+  local -a hits=()
+  [[ ${#input} -le 40 ]] || return 0
+  while IFS=$'\t' read -r name sig desc section kind; do
+    [[ -z "${name:-}" ]] && continue
+    dist="$(edit_distance "$input" "$name")"
+    if [[ "$name" == "$input"* || "$input" == "$name"* || "$dist" -le 2 ]]; then
+      hits+=("${dist}"$'\t'"${name}")
+    fi
+  done < <(command_catalog)
+  [[ ${#hits[@]} -gt 0 ]] || return 0
+  echo
+  echo "Did you mean this?"
+  printf '%s\n' "${hits[@]}" | sort -n -k1,1 -k2,2 | head -3 | cut -f2- | while IFS= read -r name; do
+    printf '    %s\n' "$name"
+  done
+}
+
+unknown_command() {
+  local cmd="$1"
+  echo "ERROR  Command \"${cmd}\" is not defined." >&2
+  suggest_commands "$cmd" >&2 || true
+  echo >&2
+  echo "Run './dock list' to see every command." >&2
+}
+
+show_help() {
+  local name="$1" sig desc
+  if ! sig="$(catalog_field "$name" sig)"; then
+    unknown_command "$name"
+    return 1
+  fi
+  desc="$(catalog_field "$name" desc)"
+  cat <<EOF
+Description:
+  ${desc}
+
+Usage:
+  ./dock ${sig}
+EOF
+  command_extra "$name"
+}
+
+cmd="${1:-}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+if [[ -z "$cmd" || "$cmd" == "list" ]]; then
+  if [[ $# -gt 0 ]]; then
+    echo "list does not take arguments. See ./dock help." >&2
+    exit 1
+  fi
+  usage
+  exit 0
+fi
+
+if [[ "$cmd" == "help" || "$cmd" == "-h" || "$cmd" == "--help" ]]; then
+  if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+  fi
+  if [[ $# -gt 1 ]]; then
+    echo "help takes one command name." >&2
+    exit 1
+  fi
+  show_help "$1"
+  exit $?
+fi
+
+if ! catalog_field "$cmd" sig >/dev/null; then
+  unknown_command "$cmd"
+  exit 1
+fi
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  show_help "$cmd"
+  exit $?
+fi
+
+# install syncs publish.yml from setup, after it has written the host mode.
+if [[ "$cmd" != "install" ]]; then
   "$ROOT/scripts/sync-publish.sh"
 fi
 
 case "$cmd" in
-  help|-h|--help|list)
-    usage
-    ;;
   setup)
     run "$ROOT/scripts/setup.sh" "$@"
     ;;
@@ -197,7 +482,8 @@ case "$cmd" in
     # shellcheck source=/dev/null
     source "$ROOT/.env"
     set +a
-    run "$ROOT/scripts/create-app-db.sh" "$db" "$user" "$pass"
+    echo "+ create database ${db} (user ${user})"
+    "$ROOT/scripts/create-app-db.sh" "$db" "$user" "$pass"
     ;;
   backup)
     run "$ROOT/scripts/backup-postgres.sh" "$@"
@@ -223,7 +509,11 @@ case "$cmd" in
   validate)
     run "$ROOT/scripts/validate.sh"
     ;;
+  install)
+    "$ROOT/scripts/install.sh" "$@"
+    ;;
   *)
-    run "${COMPOSE[@]}" "$cmd" "$@"
+    unknown_command "$cmd"
+    exit 1
     ;;
 esac

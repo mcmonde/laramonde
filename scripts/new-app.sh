@@ -82,7 +82,7 @@ if [[ -z "$APP" ]]; then
   exit 1
 fi
 
-if [[ ! "$APP" =~ ^[a-z][a-z0-9-]*$ ]]; then
+if ! valid_app_name "$APP"; then
   echo "App name must be lowercase alphanumeric, optional hyphens, starting with a letter."
   exit 1
 fi

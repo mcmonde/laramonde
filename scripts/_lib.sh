@@ -202,6 +202,26 @@ ensure_backup_s3_prefix() {
 
 # ---- apps --------------------------------------------------------------------
 
+# Lowercase letter, then lowercase letters, digits, or hyphens.
+valid_app_name() {
+  [[ "${1:-}" =~ ^[a-z][a-z0-9-]*$ ]]
+}
+
+# App names included as sites/<app>/compose.yml. Names starting with _
+# are scaffolding templates (_template, _template_octane), not apps.
+registered_app_names() {
+  local file="${1:-$ROOT/docker-compose.yml}"
+  local line app
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r line || [[ -n "${line:-}" ]]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ path:[[:space:]]*sites/([^/[:space:]]+)/compose\.yml ]] || continue
+    app="${BASH_REMATCH[1]}"
+    [[ "$app" == _* ]] && continue
+    printf '%s\n' "$app"
+  done < "$file"
+}
+
 site_defaults() {
   echo "$ROOT/sites/$1/defaults.env"
 }
@@ -282,7 +302,7 @@ prompt_continue() {
     echo "$msg (RESOURCES_ASSUME_YES=1 — continuing)"
     return 0
   fi
-  if [[ ! -t 0 ]]; then
+  if [[ "${DOCK_NO_INTERACTION:-0}" == "1" || ! -t 0 ]]; then
     echo "$msg"
     echo "Non-interactive session: treating as NO. Re-run with --force or RESOURCES_ASSUME_YES=1."
     return 1

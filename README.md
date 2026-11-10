@@ -21,18 +21,38 @@ multi-app/
 
 Requires **Docker Compose v2.20+** (v2.23+ recommended so `deploy.resources.limits` apply under `docker compose up`; this host uses Compose v5).
 
-No apps are pre-installed. Add each one with `./dock new-app` (see Quick start).
+No apps are pre-installed. `./dock install` registers the first one; `./dock new-app` adds the rest (see Quick start).
 
 ## Quick start
 
 ```bash
 cd /path/to/multi-app
-./dock setup                 # strong secrets + host detect + Scout/Mail sync
-./dock up                    # shared nginx, postgres, redis (+ profiled services)
+./dock                       # command list (same as ./dock list and ./dock help)
+./dock install               # first host: development or production, project name, then setup + up + the first app
+```
 
-./dock new-app portal portal.local
-# Clone into apps/portal (dir has .gitkeep — use rsync or remove it first):
-#   git clone your-repo /tmp/portal && rsync -a /tmp/portal/ apps/portal/ && rm -rf /tmp/portal
+`./dock install` asks when `docker-compose.yml` has no `sites/<app>/compose.yml` include. Template directories (`sites/_template`, `sites/_template_octane`) do not count. A later `./dock install`, once an app is included, skips the questions.
+
+1. **development or production.** Development writes the `.env.example` host values: `COMPOSE_PROFILES=dev,search`, `NGINX_BIND=127.0.0.1`, `CERTBOT_STAGING=1`, `MEILI_ENV=development`, `RESOURCE_MODE=auto`. Production writes the [production guide](docs/02-production.md) values: `COMPOSE_PROFILES=tls`, `NGINX_BIND=0.0.0.0`, `CERTBOT_STAGING=0`, `MEILI_ENV=production`, `RESOURCE_MODE=unlimited` (small-host default; set `auto` on a larger host and run `./dock resources apply`).
+2. **Project name.** That name is the first app, using the `./dock new-app` name rules. The domain defaults to `<name>.local`.
+3. **Development only:** install the latest Laravel into `apps/<name>`, or clone a git repository you give. In production, `apps/<name>` stays empty for the deploy.
+
+It then runs `./dock setup`, starts the stack, and registers the app (database and nginx vhost). `./dock setup` and `./dock new-app` stay available. Use `new-app` for later apps, and for a first app that needs a real domain, `--octane`, or `--php`.
+
+Preview the questions, or run without prompts:
+
+```bash
+./dock install --dry-run
+./dock install --dry-run --no-interaction --env development --name portal --laravel
+./dock install --no-interaction --env development --name portal --laravel
+./dock install --no-interaction --env production --name crm
+./dock install --no-interaction --env development --name portal --git git@github.com:org/portal.git
+```
+
+When install already placed the code, merge env and initialise. Otherwise clone first (`apps/<name>` contains `.gitkeep`):
+
+```bash
+git clone your-repo /tmp/portal && rsync -a /tmp/portal/ apps/portal/ && rm -rf /tmp/portal
 # merge sites/portal/.env.laravel.example into apps/portal/.env
 
 echo "127.0.0.1 portal.local" | sudo tee -a /etc/hosts
@@ -306,6 +326,8 @@ Cron:
 ## Common commands
 
 ```bash
+./dock                            # command list
+./dock help new-app
 ./dock apps                      # all apps: runtime, PHP, domain, limits, workers
 ./dock apps portal               # full config of one app
 ./dock artisan portal tinker

@@ -1,6 +1,7 @@
 # Laradock-style root file: shared networks/volumes + per-service includes.
 # Requires Docker Compose v2.20+ (v2.23+ recommended for deploy.resources.limits).
-# Start: ./dock setup && ./dock up
+# First install: ./dock install
+# Later: ./dock setup && ./dock up
 # Add an app: ./dock new-app portal
 # Remove an app: ./dock remove-app portal
 

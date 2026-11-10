@@ -18,26 +18,29 @@ From a fresh server to apps served over HTTPS, with certificate renewal, nightly
 mkdir -p /home/www && cd /home/www
 git clone git@github.com:mcmonde/laramonde.git laramonde
 cd laramonde
-cp .env.example .env
+./dock install
 ```
 
-Edit `.env` before running setup:
+Answer `production`, then the project name. The code question is only asked in development. That answer writes:
 
 ```env
 COMPOSE_PROFILES=tls            # add ,search if any app uses Meilisearch
 NGINX_BIND=0.0.0.0              # listen on the public interface
-CERTBOT_EMAIL=you@company.com
 CERTBOT_STAGING=0               # real certificates
 MEILI_ENV=production            # only matters with the search profile
 RESOURCE_MODE=unlimited         # small hosts; use auto on larger ones
 ```
 
-Then:
+Install then runs `./dock setup`, starts the stack, and registers the project name as the first app (domain `<name>.local` until you change `APP_DOMAIN`). Set `CERTBOT_EMAIL=you@company.com` in `.env` before `./dock tls:issue`. On a larger host, set `RESOURCE_MODE=auto` and run `./dock resources apply`.
 
 ```bash
-./dock setup
-./dock up
+./dock install --no-interaction --env production --name crm
+./dock install --dry-run          # print the questions; write nothing
 ```
+
+A later `./dock install` skips the questions once that app is included in `docker-compose.yml`.
+
+To choose the domain, PHP version, or Octane before the first app exists, write those keys into `.env` yourself and run `./dock setup`, `./dock up`, and `./dock new-app <name> <domain>` instead.
 
 `./dock setup` keeps this `.env`. It replaces weak secrets, and when the user running it is not root it sets `APP_UID` and `APP_GID` to that user (a root setup leaves `1000` and `1000`). It syncs Scout and mail from `COMPOSE_PROFILES`: `tls` alone means `SCOUT_DRIVER=null` and `MAIL_MAILER=log`. It fills `BACKUP_S3_PREFIX=database-backups/<public-ipv4>` when the prefix is still empty and a public IPv4 can be detected, so each server's backups land in their own folder. A prefix that already contains an IPv4 is left as-is.
 
@@ -49,6 +52,8 @@ Then:
 `./dock resources` shows the current assessment; `./dock resources apply` rewrites limits after changes.
 
 ## 3. Add each app
+
+`./dock install` already registered the first app at `<name>.local`. Set `APP_DOMAIN` and `APP_URL` in `sites/<name>/defaults.env` and run `./dock site:render <name>` before issuing a certificate. Create any later app with:
 
 ```bash
 ./dock new-app crm crm.example.com --octane --php 8.4
