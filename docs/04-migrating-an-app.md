@@ -38,7 +38,7 @@ Adjust `sites/myapp/compose.yml` as decided above (Reverb, scheduler, mail overr
 
 ## 3. Copy the code
 
-Stream from OLD to NEW through your workstation (read-only on OLD):
+Stream from OLD to NEW through your workstation (read-only on OLD). The last `chown` uses `APP_UID` and `APP_GID` from the stack `.env` on NEW (`./dock setup` writes the user who ran it; a root setup leaves `1000` and `1000`):
 
 ```bash
 ssh root@OLD 'cd /path/to/app && tar -czf - \
@@ -47,7 +47,7 @@ ssh root@OLD 'cd /path/to/app && tar -czf - \
     --exclude=./public/storage --exclude=./node_modules .' \
 | ssh root@NEW 'cd /home/www/laramonde/apps/myapp && rm -f .gitkeep && tar -xzf - \
     && mkdir -p storage/logs storage/framework/{cache/data,sessions,views} \
-    && chown -R 1000:1000 .'
+    && chown -R "$(grep ^APP_UID= /home/www/laramonde/.env | cut -d= -f2):$(grep ^APP_GID= /home/www/laramonde/.env | cut -d= -f2)" .'
 ```
 
 This keeps `.env` (and therefore `APP_KEY` — required to decrypt existing encrypted data and cookies), `vendor/`, `storage/app` uploads and any uncommitted production edits.
@@ -55,7 +55,7 @@ This keeps `.env` (and therefore `APP_KEY` — required to decrypt existing encr
 Restore placeholder files git tracks inside the excluded folders:
 
 ```bash
-cd apps/myapp && git -c safe.directory='*' checkout -- storage/ && chown -R 1000:1000 storage
+cd apps/myapp && git -c safe.directory='*' checkout -- storage/ && chown -R "$(grep ^APP_UID= /home/www/laramonde/.env | cut -d= -f2):$(grep ^APP_GID= /home/www/laramonde/.env | cut -d= -f2)" storage
 ```
 
 ## 4. Copy the database

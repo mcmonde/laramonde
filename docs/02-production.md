@@ -5,7 +5,8 @@ From a fresh server to apps served over HTTPS, with certificate renewal, nightly
 ## 1. Prepare the server
 
 - **OS:** Ubuntu/Debian with a public IPv4.
-- **Docker:** Docker Engine + Compose plugin **v2.23+**.
+- **Docker:** Docker Engine + Compose **v2.20+** (v2.23+ so `deploy.resources.limits` apply on `docker compose up`).
+- **Host tools:** `openssl` and `sha256sum` (setup secrets and per-app Redis ACLs). `python3` when `COMPOSE_PROFILES` includes `search`, or when you run `./dock scan-app`. `curl` is how setup looks up this server's public IPv4.
 - **Firewall:** allow inbound `22`, `80`, `443`. Nothing else needs to be public — Postgres, Redis and Meilisearch stay on Docker's internal network.
 - **DNS:** create an `A` record for every app domain pointing at the server **before** issuing certificates.
 - **Swap on small droplets:** on 1–2 GB RAM hosts add a 2 GB swap file; Composer and Meilisearch indexing spike memory.
@@ -38,12 +39,12 @@ Then:
 ./dock up
 ```
 
-`./dock setup` also fills `BACKUP_S3_PREFIX=database-backups/<public-ipv4>` so each server's backups land in their own folder.
+`./dock setup` keeps this `.env`. It replaces weak secrets, and when the user running it is not root it sets `APP_UID` and `APP_GID` to that user (a root setup leaves `1000` and `1000`). It syncs Scout and mail from `COMPOSE_PROFILES`: `tls` alone means `SCOUT_DRIVER=null` and `MAIL_MAILER=log`. It fills `BACKUP_S3_PREFIX=database-backups/<public-ipv4>` when the prefix is still empty and a public IPv4 can be detected, so each server's backups land in their own folder. A prefix that already contains an IPv4 is left as-is.
 
 ### Resource modes
 
 - `auto` — Docker CPU/RAM limits per container, calculated from the host. `./dock new-app` refuses apps that do not fit.
-- `unlimited` — no cgroup caps; capacity problems become warnings. Practical on 1–4 GB droplets; the kernel OOM killer is the only safety net, so keep swap.
+- `unlimited` — no cgroup caps; capacity problems become warnings. `./dock resources apply` still sets `REDIS_MAXMEMORY`. Practical on 1–4 GB droplets; keep swap, because Postgres and nginx have no memory cap.
 
 `./dock resources` shows the current assessment; `./dock resources apply` rewrites limits after changes.
 
@@ -52,6 +53,8 @@ Then:
 ```bash
 ./dock new-app crm crm.example.com --octane --php 8.4
 ```
+
+`new-app` writes a Redis ACL user `app:<name>`. With `search` in `COMPOSE_PROFILES` it also requests a Meilisearch key limited to `<name>_*` and exits before creating the app when Meilisearch does not issue one.
 
 Non-interactive sessions treat the capacity prompt as "no". When you have checked the host, confirm with:
 

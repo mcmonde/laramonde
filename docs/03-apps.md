@@ -143,7 +143,7 @@ nginx sends `/api/*`, `/sanctum/*`, `/broadcasting/*` and `/up` to Laravel and e
 
 The templates target Laravel 11+. For older apps:
 
-1. **No Reverb.** Delete the `<app>-reverb` service from `sites/<app>/compose.yml`, and remove the `upstream <app>_reverb { … }` block and the `location /app { … }` block from `nginx/conf.d/sites/<app>.conf`. Otherwise nginx fails with `host not found in upstream "<app>-reverb:8080"`. Re-apply after every `./dock site:render` or `./dock tls:issue`, which regenerate the vhost from the template.
+1. **No Reverb.** Delete the `<app>-reverb` service from `sites/<app>/compose.yml`, and remove the `upstream <app>_reverb { … }` block plus `location = /app` and `location /app/` from `nginx/conf.d/sites/<app>.conf`. On an SPA vhost, also remove `location /apps`. Otherwise nginx fails with `host not found in upstream "<app>-reverb:8080"`. Re-apply after every `./dock site:render` or `./dock tls:issue`, which regenerate the vhost from the template.
 2. **Cache key.** Laravel ≤10 reads `CACHE_DRIVER`, not `CACHE_STORE`. Set `CACHE_DRIVER` in the container environment or the app `.env`.
 3. **Broadcasting.** Remove `BROADCAST_CONNECTION` / `REVERB_*` from the container environment if the app uses another driver.
 4. **PHP.** Laravel 8 officially supports PHP ≤ 8.1, but most Laravel 8 apps run on 8.2/8.3 once `composer.lock` resolves. Match what production already runs (`--php 8.3`), and check `composer.lock` for packages requiring `php >= 8.2`.
@@ -157,7 +157,7 @@ The templates target Laravel 11+. For older apps:
 | `environment:` in `sites/<app>/compose.yml` | Becomes real env vars inside the containers | `--force-recreate` |
 | `apps/<app>/.env` | Laravel | `./dock artisan <app> config:clear` and restart the app's containers (Octane always needs a restart/reload) |
 
-Laravel never overwrites an environment variable that already exists, so **container environment beats `apps/<app>/.env`**. The template injects: `APP_URL`, `APP_NAME`, `DB_*`, `REDIS_*`, `CACHE_STORE`, `SESSION_DRIVER`, `QUEUE_CONNECTION`, `SCOUT_*`, `MEILISEARCH_*`, `MAIL_MAILER/HOST/PORT`, `BROADCAST_CONNECTION`, `REVERB_*`.
+Laravel never overwrites an environment variable that already exists, so **container environment beats `apps/<app>/.env`**. The template injects: `APP_URL`, `APP_NAME`, `DB_*`, `REDIS_CLIENT`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD` (the per-app ACL password), `REDIS_PREFIX`, `CACHE_STORE`, `SESSION_DRIVER`, `QUEUE_CONNECTION`, `SCOUT_*`, `MEILISEARCH_*`, `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `BROADCAST_CONNECTION`, `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET`, `REVERB_SERVER_HOST`, `REVERB_SERVER_PORT`. `REVERB_HOST`, `REVERB_PORT`, and `REVERB_SCHEME` stay in `apps/<app>/.env` (the merge file sets the public host).
 
 ### Mail and app name are injected
 

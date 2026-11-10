@@ -100,8 +100,8 @@ Fix: raise `REDIS_MAXMEMORY`/`REDIS_MEMORY` (or give Redis more via `./dock reso
 
 ## Permission denied inside an app
 
-- App containers run as UID/GID `1000` (`APP_UID`/`APP_GID`). Fix ownership on the host: `chown -R 1000:1000 apps/<app>/storage apps/<app>/bootstrap/cache`.
-- Containers run with `cap_drop: ALL`, so even root inside cannot write files owned by another user. Run one-off commands as the app user: `docker compose exec --user 1000:1000 <app>-php …` (e.g. creating a Python venv inside `apps/<app>`).
+- App containers run as `APP_UID`:`APP_GID` from the root `.env`. `./dock setup` stores the uid and gid of the user who ran it. A setup run as root leaves `1000` and `1000`. From the repo root: `chown -R "$(grep ^APP_UID= .env | cut -d= -f2):$(grep ^APP_GID= .env | cut -d= -f2)" apps/<app>/storage apps/<app>/bootstrap/cache`.
+- Containers run with `cap_drop: ALL`, so a process inside cannot chown files to another user. Run one-off commands as the same uid: `docker compose exec --user "$(grep ^APP_UID= .env | cut -d= -f2):$(grep ^APP_GID= .env | cut -d= -f2)" <app>-php …` (for example, creating a Python venv inside `apps/<app>`). The PHP image also bakes `APP_UID` into `www-data` at build time, so rebuild that app's image after changing the pair.
 - `git` refuses with *dubious ownership* when run as root on `apps/<app>`: use `git -c safe.directory='*' …` instead of changing global git config.
 
 ## `./dock new-app` aborts with "Non-interactive session: treating as NO"
