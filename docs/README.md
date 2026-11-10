@@ -28,4 +28,4 @@ The top-level [README](../README.md) is the quick reference (commands, profiles,
 - **Shared:** one nginx, one Postgres, one Redis, optional Meilisearch/Mailpit.
 - **Per app:** its own PHP container(s), its own database + role, its own Redis/Scout prefix, its own nginx vhost.
 - **Files:** stack settings in `.env`, per-app settings in `sites/<app>/`, app code in `apps/<app>/`.
-- **CLI:** `./dock` wraps `docker compose` plus the helper scripts in `scripts/`. No arguments prints the command list. `./dock help <command>` shows one command. `./dock install` is the first-run path when no app is registered yet.
+- **CLI:** `./dock` wraps `docker compose` plus the helper scripts in `scripts/`. No arguments prints the command list. `./dock help <command>` shows one command. `./dock install` is the first-run path when no app is registered yet. `./dock about` prints development or production from `.env`.

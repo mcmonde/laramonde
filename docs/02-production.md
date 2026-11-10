@@ -33,6 +33,8 @@ RESOURCE_MODE=unlimited         # small hosts; use auto on larger ones
 
 Install then runs `./dock setup`, starts the stack, and registers the project name as the first app (domain `<name>.local` until you change `APP_DOMAIN`). Set `CERTBOT_EMAIL=you@company.com` in `.env` before `./dock tls:issue`. On a larger host, set `RESOURCE_MODE=auto` and run `./dock resources apply`.
 
+`./dock about` prints whether `.env` is development or production, and the five keys above. Development is a `dev` profile with `NGINX_BIND=127.0.0.1`. Production is no `dev` or `mail` profile, `NGINX_BIND=0.0.0.0`, and `CERTBOT_STAGING=0`. A missing file or any other mix exits non-zero.
+
 ```bash
 ./dock install --no-interaction --env production --name crm
 ./dock install --dry-run          # print the questions; write nothing

@@ -46,6 +46,7 @@ if [[ "$list_out" != "$(./dock list)" || "$list_out" != "$(./dock help)" || "$li
   echo "./dock, list, help, and --help should print the same command list" >&2
   exit 1
 fi
+require_text "about" "$list_out"
 require_text "install [options]" "$list_out"
 require_text "new-app <name> [host]" "$list_out"
 require_text "setup [--rotate-secrets]" "$list_out"
@@ -64,6 +65,9 @@ elif grep -q -F -e "No apps yet" <<<"$list_out"; then
   exit 1
 fi
 
+help_about="$(./dock help about)"
+require_text "NGINX_BIND=127.0.0.1" "$help_about"
+require_text "CERTBOT_STAGING=0" "$help_about"
 help_install="$(./dock help install)"
 require_text "--dry-run" "$help_install"
 require_text "--no-interaction" "$help_install"
@@ -157,6 +161,59 @@ require_text "non-interactive" "$ni"
 [[ "$notty_rc" -eq 1 ]]
 require_text "terminal" "$notty"
 rm -f "$empty_compose" "$apps_compose"
+
+about_env="$(mktemp)"
+chmod 600 "$about_env"
+cat > "$about_env" <<'EOF'
+COMPOSE_PROFILES=dev,search
+NGINX_BIND=127.0.0.1
+CERTBOT_STAGING=0
+MEILI_ENV=development
+RESOURCE_MODE=unlimited
+POSTGRES_PASSWORD=super-secret-value
+EOF
+about_dev="$(DOCK_ABOUT_ENV="$about_env" ./dock about)"
+require_text "Host: development" "$about_dev"
+require_text "COMPOSE_PROFILES=dev,search" "$about_dev"
+require_text "NGINX_BIND=127.0.0.1" "$about_dev"
+require_text "CERTBOT_STAGING=0" "$about_dev"
+require_text "MEILI_ENV=development" "$about_dev"
+require_text "RESOURCE_MODE=unlimited" "$about_dev"
+if grep -q -F -e "super-secret-value" <<<"$about_dev" || grep -q -F -e "POSTGRES_PASSWORD" <<<"$about_dev"; then
+  echo "about printed a secret" >&2
+  exit 1
+fi
+
+cat > "$about_env" <<'EOF'
+COMPOSE_PROFILES=tls,search
+NGINX_BIND=0.0.0.0
+CERTBOT_STAGING=0
+MEILI_ENV=production
+RESOURCE_MODE=auto
+EOF
+about_prod="$(DOCK_ABOUT_ENV="$about_env" ./dock about)"
+require_text "Host: production" "$about_prod"
+require_text "COMPOSE_PROFILES=tls,search" "$about_prod"
+require_text "NGINX_BIND=0.0.0.0" "$about_prod"
+
+printf '%s\n' 'COMPOSE_PROFILES=' 'NGINX_BIND=0.0.0.0' 'CERTBOT_STAGING=0' > "$about_env"
+about_lean="$(DOCK_ABOUT_ENV="$about_env" ./dock about)"
+require_text "Host: production" "$about_lean"
+
+printf '%s\n' 'COMPOSE_PROFILES=dev,search' 'NGINX_BIND=0.0.0.0' 'CERTBOT_STAGING=0' > "$about_env"
+set +e
+about_mix="$(DOCK_ABOUT_ENV="$about_env" ./dock about 2>&1)"
+about_mix_rc=$?
+missing="$(DOCK_ABOUT_ENV="$about_env.absent" ./dock about 2>&1)"
+missing_rc=$?
+set -e
+[[ "$about_mix_rc" -eq 1 ]]
+require_text "Host: unrecognized" "$about_mix"
+require_text "matches neither" "$about_mix"
+require_text "COMPOSE_PROFILES=dev,search" "$about_mix"
+[[ "$missing_rc" -eq 1 ]]
+require_text ".env is missing" "$missing"
+rm -f "$about_env"
 
 after_private="$(sha256sum "${private_files[@]}" | sha256sum)"
 if [[ "$before_private" != "$after_private" ]]; then

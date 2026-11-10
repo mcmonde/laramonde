@@ -37,7 +37,7 @@ cd /path/to/multi-app
 2. **Project name.** That name is the first app, using the `./dock new-app` name rules. The domain defaults to `<name>.local`.
 3. **Development only:** install the latest Laravel into `apps/<name>`, or clone a git repository you give. In production, `apps/<name>` stays empty for the deploy.
 
-It then runs `./dock setup`, starts the stack, and registers the app (database and nginx vhost). `./dock setup` and `./dock new-app` stay available. Use `new-app` for later apps, and for a first app that needs a real domain, `--octane`, or `--php`.
+It then runs `./dock setup`, starts the stack, and registers the app (database and nginx vhost). `./dock about` prints which shape `.env` matches, plus those five keys. `./dock setup` and `./dock new-app` stay available. Use `new-app` for later apps, and for a first app that needs a real domain, `--octane`, or `--php`.
 
 Preview the questions, or run without prompts:
 
@@ -327,6 +327,7 @@ Cron:
 
 ```bash
 ./dock                            # command list
+./dock about                     # development or production, from .env
 ./dock help new-app
 ./dock apps                      # all apps: runtime, PHP, domain, limits, workers
 ./dock apps portal               # full config of one app

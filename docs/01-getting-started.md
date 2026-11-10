@@ -26,7 +26,7 @@ It asks:
 2. **Project name.** That name is the first app. It follows the `./dock new-app` rules: a lowercase letter, then lowercase letters, digits, or hyphens. The domain defaults to `<name>.local`.
 3. **Development only:** install the latest Laravel into `apps/<name>`, or clone a git repository you give. In production, `apps/<name>` stays empty for the deploy.
 
-It then runs `./dock setup`, starts the stack, and registers the app (Postgres database and nginx vhost). `./dock setup` and `./dock new-app` remain the commands for a later app, a secret rotation, or a first app that needs its own domain, `--octane`, or `--php`.
+It then runs `./dock setup`, starts the stack, and registers the app (Postgres database and nginx vhost). `./dock about` reads `.env` and prints development or production, plus `COMPOSE_PROFILES`, `NGINX_BIND`, `CERTBOT_STAGING`, `MEILI_ENV`, and `RESOURCE_MODE`. Development is a `dev` profile with nginx on `127.0.0.1`. Production is no `dev` or `mail` profile, `NGINX_BIND=0.0.0.0`, and `CERTBOT_STAGING=0`. `./dock setup` and `./dock new-app` remain the commands for a later app, a secret rotation, or a first app that needs its own domain, `--octane`, or `--php`.
 
 Preview the questions without answering them, or pass the answers in a script:
 
@@ -124,6 +124,7 @@ Open <http://portal.local>. Mail sent by the app shows up in Mailpit at <http://
 
 ```bash
 ./dock                                   # command list
+./dock about                            # development or production, from .env
 ./dock help new-app
 ./dock artisan portal tinker            # artisan in the app's PHP container
 ./dock composer portal require foo/bar  # composer in the app's PHP container

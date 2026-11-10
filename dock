@@ -31,6 +31,7 @@ command_catalog() {
   printf '%s\n' \
     $'help\thelp [command]\tDisplay help for a command\troot\t' \
     $'list\tlist\tList commands\troot\t' \
+    $'about\tabout\tShow whether this host is development or production\troot\t' \
     $'install\tinstall [options]\tFirst install when no apps are registered\troot\t' \
     $'setup\tsetup [--rotate-secrets]\tCreate .env and generate secrets\troot\t' \
     $'validate\tvalidate\tCompose config and bash -n on scripts\troot\t' \
@@ -99,6 +100,17 @@ print_command_list() {
 
 command_extra() {
   case "$1" in
+    about)
+      cat <<'EOF'
+
+Reads the root .env and prints COMPOSE_PROFILES, NGINX_BIND, CERTBOT_STAGING,
+MEILI_ENV, and RESOURCE_MODE. No other keys are printed.
+
+Development: a dev profile and NGINX_BIND=127.0.0.1.
+Production: no dev or mail profile, NGINX_BIND=0.0.0.0, and CERTBOT_STAGING=0.
+A missing .env, or a mix that matches neither, exits non-zero.
+EOF
+      ;;
     install)
       cat <<'EOF'
 
@@ -394,7 +406,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # install syncs publish.yml from setup, after it has written the host mode.
-if [[ "$cmd" != "install" ]]; then
+# about only reads .env.
+if [[ "$cmd" != "install" && "$cmd" != "about" ]]; then
   "$ROOT/scripts/sync-publish.sh"
 fi
 
@@ -511,6 +524,9 @@ case "$cmd" in
     ;;
   install)
     "$ROOT/scripts/install.sh" "$@"
+    ;;
+  about)
+    "$ROOT/scripts/about.sh" "$@"
     ;;
   *)
     unknown_command "$cmd"
